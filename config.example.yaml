@@ -1,0 +1,32 @@
+# U1 Guardian example config.
+# Copy to config.yaml. Only the parts built so far are here.
+# Never put secrets in this file. Use environment variables.
+
+printer:
+  host: 192.168.1.50
+  moonraker_port: 7125        # UNVERIFIED on the U1. Standard Moonraker default.
+  # API key: set the env var GUARDIAN_MOONRAKER_KEY
+
+camera:
+  source_url: ""              # empty means use the stand-in test video. Real URL comes after discovery.
+  standin_codec: h264         # h264 | mjpeg. Only used for the stand-in video.
+  segment_length_s: 2
+  latency_offset_ms: 0        # set by calibration later
+  ffmpeg_path: ffmpeg
+  ffprobe_path: ffprobe
+
+blackbox:
+  pre_trigger_s: 30
+  post_trigger_s: 15
+  buffer_mode: printing       # printing | always
+  max_incident_s: 300
+  duplicate_window_s: 5
+
+storage:
+  # Leave data_dir and buffer_dir out to use the normal folder for your OS.
+  # data_dir: ./data
+  # buffer_dir: ./data/buffer   # on a Pi, point this at a RAM disk (tmpfs)
+  max_total_gb: 5
+  max_age_days: 90
+  max_incidents: 500
+  warn_free_gb: 2
