@@ -137,6 +137,14 @@ class Database:
                 (event_id,),
             )
 
+    def incident_of_event(self, event_id: int) -> sqlite3.Row:
+        """The incident row that owns an event."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT i.* FROM incidents i JOIN incident_events e ON e.incident_id = i.id"
+                " WHERE e.id = ?", (event_id,)
+            ).fetchone()
+
     def list_events(self, incident_id: int) -> list[sqlite3.Row]:
         with self._lock:
             return self._conn.execute(

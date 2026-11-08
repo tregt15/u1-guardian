@@ -121,6 +121,11 @@ class SegmentBuffer:
 
     # ---- queries ----
 
+    @property
+    def first_run_start(self) -> datetime | None:
+        """Wall-clock start of the first FFmpeg run (the stand-in clock counts from here)."""
+        return self._runs[0].start_utc if self._runs else None
+
     def all_segments(self) -> list[Segment]:
         return sorted(self._segments.values(), key=lambda s: s.start_utc)
 
