@@ -7,3 +7,6 @@ dist/
 data/
 config.yaml
 .env
+
+# discovery dumps contain serial number, MACs, IPs
+docs/discovery/
