@@ -48,3 +48,25 @@ Not verified yet:
 - Whether the snapshot file updates when the app camera view is OFF (the 502 earlier and the `notify_camera_monitoring_to_stop` log lines suggest it does not).
 - Whether the frame is a true 1 fps or can go faster. A real video stream was not found.
 - Whether detections appear on the Moonraker WebSocket or MQTT during a print.
+
+## First print attempt (2026-11-08): print refused. Real events seen on the WebSocket
+
+Recorded by `tools/ws_recorder.py` (file stays local in `recordings/`). The print was sent from the Snapmaker app
+(`server.files.start_cloud_print`). The printer refused to start it, twice (two files).
+
+Verified Moonraker WebSocket notifications, seen on a real U1:
+
+- `notify_gcode_response`: `"!! [print_task_config] nozzle diameter mismatch:f_0 != e_0.4"`
+- `notify_exception_notification` (twice per failure): `{id: 531, code: 14, level: 3, message: ...}` then
+  `{id: 531, code: 7, level: 1, message: "Failed to start print: ..."}`. The user saw the screen error `0001 0531 0000 0007`,
+  which matches id 531 and code 7.
+- `notify_file_pull_progress` with `state: "downloading"` (percent) and then `state: "error"`.
+- `notify_filelist_changed` for the downloaded gcode and thumbnails.
+- `notify_camera_status_change` with `{"monitor_domain": "lan", "monitoring": true}` when the camera monitoring went on.
+  This is a Moonraker notification Guardian can listen for.
+
+Cause (from Klipper's `print_task_config.py` on the printer): the print job's nozzle diameter was 0 (never set),
+the installed nozzle is 0.4, so the check fails. Likely the sliced file or the app did not provide a nozzle diameter.
+Exact reason is UNVERIFIED. Nothing was changed on the printer. `print_stats.state` stayed `standby`.
+
+This is a good example of an event Guardian should record, but it is a pre-print failure, not a mid-print one.
