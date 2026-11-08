@@ -8,7 +8,7 @@ Guardian only watches. It never sends a command that changes the printer.
 
 ## Status
 
-Early work. Nothing here has been tested on a real U1 yet. The printer has not arrived.
+Early work. The capture and incident code has only been tested with a stand-in test video. The camera on a real U1 has not been read yet.
 
 What exists so far (Milestone 0, no printer needed):
 
