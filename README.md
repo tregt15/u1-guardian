@@ -13,7 +13,9 @@ Early work. Nothing here has been tested on a real U1 yet. The printer has not a
 What exists so far (Milestone 0, no printer needed):
 
 - Config, event bus, clock, SQLite storage
-- Camera capture prototype using a stand-in test video (in progress)
+- Camera capture with a rolling 2 second segment buffer (stand-in test video for now)
+- Incident manager: saves 30 s before and 15 s after a trigger, merges repeats, and reports honest recording status
+- `tools/simulate_trigger.py` to fire fake triggers and check the clips
 
 Everything about the real U1 (camera format, Moonraker objects, detection alerts) is **unverified**.
 
@@ -21,7 +23,7 @@ Everything about the real U1 (camera format, Moonraker objects, detection alerts
 
 | Platform | Tested |
 |---|---|
-| Windows 11 | in progress |
+| Windows 11 | capture, incidents and tests run here |
 | Raspberry Pi 3B+ | not yet |
 | Linux, macOS | not yet |
 
@@ -37,6 +39,13 @@ py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev]
 pytest
+```
+
+Run the simulation (100 fake triggers, checks each clip, about 1 to 2 minutes):
+
+```
+python tools/simulate_trigger.py
+python tools/simulate_trigger.py --live
 ```
 
 ## License
