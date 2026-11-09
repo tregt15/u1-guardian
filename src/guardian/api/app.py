@@ -215,6 +215,17 @@ def create_app(ctx: ApiContext) -> FastAPI:
         media = "video/mp4" if path.suffix == ".mp4" else "video/x-matroska"
         return FileResponse(path, media_type=media)  # supports HTTP range requests
 
+    def logs_path(row) -> Path:
+        return incident_dir(cfg.storage, row["id"], from_iso(row["first_trigger_utc"])) / "printer_logs.txt"
+
+    @app.get("/api/incidents/{uid}/logs", dependencies=[Depends(auth)])
+    async def incident_logs(uid: str) -> dict:
+        path = logs_path(get_row(uid))
+        if not path.is_file():
+            return {"available": False, "text": None,
+                    "note": "No printer logs for this incident (still recording, turned off, or the printer could not be read)."}
+        return {"available": True, "text": path.read_text(encoding="utf-8", errors="replace")}
+
     @app.get("/api/incidents/{uid}/export", dependencies=[Depends(auth)])
     async def export(uid: str):
         row = get_row(uid)
@@ -228,6 +239,9 @@ def create_app(ctx: ApiContext) -> FastAPI:
                 z.write(clip, arcname=clip.name)
                 for extra in clip.parent.glob("clip_original.*"):  # full quality original, if kept
                     z.write(extra, arcname=extra.name)
+            plogs = logs_path(row)
+            if plogs.is_file():
+                z.write(plogs, arcname=plogs.name)
             detail = await get_incident(uid)
             z.writestr("report.json", json.dumps(
                 {"incident": detail["incident"], "events": detail["events"], "clip": detail["clip"]},

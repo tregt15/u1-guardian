@@ -119,6 +119,16 @@ document.getElementById("delete").addEventListener("click", async () => {
   catch (e) { alert("Could not delete: " + e.message); }
 });
 
+async function loadLogs() {
+  try {
+    const r = await api("/api/incidents/" + encodeURIComponent(uid) + "/logs");
+    document.getElementById("logs-sum").textContent = r.available ? "Printer logs for this time (click to open)" : r.note;
+    document.getElementById("logs").textContent = r.text || "";
+    return r.available;
+  } catch (e) { document.getElementById("logs-sum").textContent = "Could not load printer logs: " + e.message; return true; }
+}
+
 load();
+loadLogs().then(ok => { if (!ok) { const t = setInterval(async () => { if (await loadLogs()) clearInterval(t); }, 10000); } });
 // While recording, check again so the page updates by itself.
 setInterval(() => { if (data && data.incident.recording_status === "recording") load(); }, 5000);

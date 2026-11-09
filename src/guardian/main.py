@@ -27,13 +27,15 @@ from guardian.camera.keepalive import CameraKeepalive
 from guardian.camera.segment_buffer import SegmentBuffer
 from guardian.camera.session_watch import CameraSessionWatch
 from guardian.camera.snapshot import FrameBuffer, SnapshotCapture
-from guardian.clock import Clock, SystemClock, to_iso
+from guardian.clock import Clock, SystemClock, from_iso, to_iso
+from guardian.storage.paths import incident_dir
 from guardian.config import Config, ConfigError, default_config_path, load_config
 from guardian.env import load_dotenv
 from guardian.notify.email import ResendEmailChannel
 from guardian.notify.manager import NotificationManager
 from guardian.printer.autopause import AutoPause
 from guardian.printer.detectors import Detector
+from guardian.printer.logs import PrinterLogs
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
 from guardian.printer.toolchanger import ToolchangeMonitor
@@ -113,6 +115,9 @@ class App:
         self.bus.subscribe("incident.created", self._log_event)
         self.bus.subscribe("incident.merged", self._log_event)
         self.bus.subscribe("incident.finalized", self._log_event)
+        self.printer_logs = PrinterLogs(cfg.printer.host, printer_port or cfg.printer.moonraker_port)
+        self._bg: set[asyncio.Task] = set()
+        self.bus.subscribe("incident.finalized", self._on_finalized)
 
     # ---- wiring ----
 
@@ -125,6 +130,34 @@ class App:
         except Exception:  # noqa: BLE001 - never lose the incident over this
             log.exception("auto pause check failed")
         return result
+
+    def _on_finalized(self, topic: str, payload) -> None:
+        """Work that may take a while runs in the background so recording never waits on it."""
+        task = asyncio.create_task(self._after_incident(payload["uid"]))
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+
+    async def _after_incident(self, uid: str) -> None:
+        try:
+            if self.cfg.printer.fetch_logs:
+                await self._save_printer_logs(uid)
+        except Exception:  # noqa: BLE001
+            log.exception("after-incident work failed for %s", uid)
+
+    async def _save_printer_logs(self, uid: str) -> None:
+        row = self.db.get_incident_by_uid(uid)
+        if row is None:
+            return
+        bb = self.cfg.blackbox
+        first, last = from_iso(row["first_trigger_utc"]), from_iso(row["last_trigger_utc"])
+        start = first - timedelta(seconds=bb.pre_trigger_s)
+        end = last + timedelta(seconds=bb.post_trigger_s)
+        text, problems = await self.printer_logs.collect(start, end, self.clock.now_utc())
+        folder = incident_dir(self.cfg.storage, row["id"], first)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "printer_logs.txt").write_text(text, encoding="utf-8")
+        if problems:
+            log.warning("printer logs for %s were partly unreadable: %s", uid, problems)
 
     def _sync_write_permissions(self) -> None:
         """The client may only send the two opt-in requests while their settings allow it."""

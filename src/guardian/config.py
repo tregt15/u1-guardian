@@ -30,6 +30,8 @@ class PrinterConfig(_Section):
     host: str = "192.168.1.50"
     # UNVERIFIED on the U1. 7125 is the standard Moonraker default.
     moonraker_port: int = Field(default=7125, ge=1, le=65535)
+    # After an incident, read the printer's own logs for that time (read only) and keep them with it.
+    fetch_logs: bool = True
 
     @property
     def api_key(self) -> str:

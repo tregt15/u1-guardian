@@ -47,6 +47,8 @@ FIELDS: list[dict[str, Any]] = [
      "help": "Leave empty to learn it from your printer's normal tool changes."},
     {"key": "toolchanger.timeout_floor_s", "group": "Tool changes", "label": "Never call stuck sooner than (seconds)",
      "kind": "number", "min": 1, "max": 600, "help": "Used while learning, and as the lowest learned value."},
+    {"key": "printer.fetch_logs", "group": "Recording", "label": "Keep the printer's logs with each incident",
+     "kind": "bool", "help": "Reads the printer's own logs for that time (read only)."},
     {"key": "blackbox.pre_trigger_s", "group": "Recording", "label": "Seconds before a problem", "kind": "number",
      "min": 1, "max": 600, "help": "Footage saved from before the problem."},
     {"key": "blackbox.post_trigger_s", "group": "Recording", "label": "Seconds after a problem", "kind": "number",
