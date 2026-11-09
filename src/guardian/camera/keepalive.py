@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 COOLDOWN_S = 15.0
 STALE_S = 10.0
 STALE_COOLDOWN_S = 30.0  # if the camera does not come back, do not hammer the printer
+UNKNOWN_COOLDOWN_S = 60.0
 
 
 class CameraKeepalive:
@@ -63,9 +64,17 @@ class CameraKeepalive:
             return self._print_state() in ("printing", "paused")
         return False
 
+    def _fresh_pictures(self) -> bool:
+        last = self._last_frame()
+        return bool(self._frames_watched() and last and (self.clock.now_utc() - last).total_seconds() < STALE_S)
+
     def _reason(self) -> tuple[str, float] | None:
         if self.session.monitoring is None:
-            return "camera state not known yet", COOLDOWN_S
+            # The printer only announces changes. If the camera was already on when Guardian started, no
+            # message comes, so new pictures are the proof (seen 2026-11-09: it asked every 15 s before this).
+            if self._fresh_pictures():
+                return None
+            return "camera state not known yet", UNKNOWN_COOLDOWN_S
         if self.session.monitoring is False:
             return "the printer camera is off", COOLDOWN_S
         if self.session.stops_at() is not None:

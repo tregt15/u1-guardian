@@ -124,3 +124,18 @@ async def test_paused_print_keeps_camera_on():
     await rig.camera(False)
     await rig.ka.tick()
     assert rig.sent == 1
+
+
+async def test_unknown_state_but_pictures_coming_means_on():
+    """Seen on the real U1: the camera was already on when Guardian started, so the printer sent no
+    status message, and Guardian asked again every 15 s. Fresh pictures now count as proof."""
+    rig = Rig(mode="always", state="standby")
+    await rig.run(60, frames=True)
+    assert rig.sent == 0
+
+
+async def test_unknown_state_without_pictures_asks_once_a_minute():
+    rig = Rig(mode="always", state="standby")
+    rig.watched = False
+    await rig.run(61)
+    assert rig.sent == 2  # at 1 s and 61 s
