@@ -225,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # httpx logs every camera poll (about 2 a second) at INFO. That fills the log, and an SD card on a Pi.
+    logging.getLogger("httpx").setLevel(logging.DEBUG if args.verbose else logging.WARNING)
     # Each user keeps their own secrets (for example their Resend key) in the environment or a .env file.
     env_files = [Path.cwd() / ".env", default_config_path().parent / ".env"]
     if args.config:

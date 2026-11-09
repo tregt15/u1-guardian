@@ -13,3 +13,6 @@ docs/discovery/
 
 # recordings of printer traffic
 recordings/
+
+# Guardian run logs
+logs/
