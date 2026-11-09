@@ -22,6 +22,13 @@ What exists so far (Milestone 0, no printer needed):
 - Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
   or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
 - Alert when the filament feeder reports an error (seen once on a real U1)
+- Keeps the printer's own logs (Klipper, Moonraker, camera service) for the time of each incident
+- Health checks: a print that stops moving (stall), a heater that cannot reach or hold its temperature,
+  tool changes that slowly get slower
+- "Print is paused" panel on the dashboard with the reason, a live picture and what to check
+- Self-test (`python -m guardian.selftest`) that checks the printer still offers everything Guardian reads.
+  It also warns when the printer firmware changes
+- Optional local AI (see below)
 - Camera on the U1: snapshot polling, about 1 to 2 pictures a second. Guardian turns the camera on by itself while a print runs
   (`camera.keepalive`, see below). With that off, footage exists only while the Snapmaker app has the camera view open
 - Names the printer's own camera AI alerts (dirty build plate, spaghetti, residue, dirty nozzle). The printer pauses the print
@@ -61,6 +68,28 @@ Problems that can pause a print (each can be turned off): build plate not clear,
 and a filament feed error. Guardian has not paused a real print yet.
 
 Guardian has no camera AI of its own. "Build plate not clear" and the other camera checks come from the printer.
+
+## Local AI (optional)
+
+Guardian can use a local AI model to look at the camera and to explain incidents. It is off until you turn it on.
+Nothing is sent to the internet. It runs with [Ollama](https://ollama.com/download), a free program you install
+yourself (like FFmpeg). Then pick and download a model on the Settings page:
+
+- Qwen2.5-VL 7B: about 6 GB, better
+- Gemma 3 4B: about 3.3 GB, faster
+
+What it does:
+
+- **Build plate check** in the first 90 s of a print. Two pictures 5 s apart must both show something on the plate.
+- **Failure check** every 60 s during a print (spaghetti, a part that broke loose, a blob on the nozzle). A positive
+  answer is checked again 10 s later.
+- Both can pause the print through auto pause. You can turn that off per check.
+- **Diagnosis**: after a print stops or fails, the AI reads the timeline, tool changes, printer logs and three pictures,
+  and writes what probably happened and what to check. It shows on the incident page and is emailed if email is on.
+  It is always marked as an AI guess.
+
+You need a graphics card or a fast computer. A Raspberry Pi is too small for these models. A Pi can use Ollama on
+another computer (set the Ollama address). How well the models judge U1 pictures has not been tested yet.
 
 ## Settings page
 

@@ -45,6 +45,17 @@ autopause:
   # triggers: [bed_not_clear, spaghetti_detected, residue_detected, dirty_nozzle_detected,
   #            toolchange_wrong_tool, toolchange_error, toolchange_timeout, filament_feed_error]
 
+ai:
+  # Local AI through Ollama (https://ollama.com). Off until you turn it on. Nothing goes to the internet.
+  enabled: false
+  ollama_url: http://127.0.0.1:11434
+  model: qwen2.5vl:7b         # or gemma3:4b (smaller, faster)
+  bed_check: true
+  print_check: true
+  print_check_every_s: 60
+  min_confidence: 0.7
+  diagnose: stops             # off | stops | all
+
 # The Settings page saves changes to settings.yaml in the data folder. Those win over this file.
 
 storage:

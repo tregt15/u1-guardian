@@ -47,6 +47,13 @@ TOOL_FIELDS = ("state", "park_pin", "active_pin", "grab_valid_pin", "activating_
 MAX_TRANSITIONS = 60
 LATE_WATCH_S = 600.0  # keep watching a timed-out change this long in case it finishes late
 LEARN_KEEP = 200  # recent good changes used to learn the timeout
+# Slowing down: the median of the last TREND_RECENT good changes of one tool pair against the median of
+# the ones before. Real U1 changes were 3.5 to 4.4 s (406 changes), so 40% and 1 s more is well outside that.
+TREND_RECENT = 10
+TREND_MIN = 30
+TREND_RATIO = 1.4
+TREND_MIN_EXTRA_MS = 1000
+TREND_QUIET_S = 6 * 3600  # warn about one pair at most every 6 hours
 
 
 def tool_label(name: str | None) -> str:
@@ -88,6 +95,8 @@ class ToolchangeMonitor:
         self.clock = clock
         self.report = report
         self._open: list[_Change] = []
+        self._trend_warned: dict[tuple, float] = {}
+        self._pending_trend: list[_Change] = []
         self._ok_ms: deque[int] = deque(reversed(db.recent_ok_toolchange_ms(LEARN_KEEP)), maxlen=LEARN_KEEP)
         bus.subscribe("printer.snapshot", self._on_snapshot)
         bus.subscribe("printer.message", self._on_message)
@@ -122,6 +131,8 @@ class ToolchangeMonitor:
     async def tick(self) -> None:
         if not self.cfg.enabled:
             return
+        while self._pending_trend:
+            await self._check_trend(self._pending_trend.pop(0))
         now = self.clock.monotonic()
         for ch in list(self._open):
             if ch.status == "running" and now - ch.start_mono > self.timeout_s():
@@ -313,6 +324,7 @@ class ToolchangeMonitor:
         if not self._missing(ch):
             self._ok_ms.append(self._dur_ms(ch))
             self._finish(ch, "ok")
+            self._pending_trend.append(ch)  # checked on the next tick (needs an await)
 
     async def _settle_failed(self, ch: _Change) -> None:
         actual = self.tracker.status.get("toolhead", {}).get("extruder")
@@ -384,6 +396,24 @@ class ToolchangeMonitor:
         incident_id = getattr(result, "incident_id", None)
         if incident_id:
             self.db.update_toolchange(ch.record_id, incident_id=incident_id)
+
+    async def _check_trend(self, ch: _Change) -> None:
+        pair = (ch.prev, ch.new)
+        times = self.db.recent_ok_pair_ms(ch.prev, ch.new, limit=60)
+        if len(times) < TREND_MIN:
+            return
+        recent, older = sorted(times[:TREND_RECENT]), sorted(times[TREND_RECENT:])
+        r_med, o_med = recent[len(recent) // 2], older[len(older) // 2]
+        if r_med < o_med * TREND_RATIO or r_med - o_med < TREND_MIN_EXTRA_MS:
+            return
+        now = self.clock.monotonic()
+        if now - self._trend_warned.get(pair, -1e18) < TREND_QUIET_S:
+            return
+        self._trend_warned[pair] = now
+        await self._fire(ch, "toolchange_slowing", "warning",
+                         f"Tool changes {ch.label} are getting slower: lately {r_med / 1000:.1f} s, "
+                         f"before that {o_med / 1000:.1f} s. Check that tool's dock and pickup.",
+                         {"recent_median_ms": r_med, "earlier_median_ms": o_med})
 
     # ---- helpers ----
 

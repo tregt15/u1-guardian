@@ -22,6 +22,12 @@
     <h2>AI model</h2>
     <div class="card" id="ai-box"><p class="muted">Checking for Ollama...</p></div>
   </section>
+  <section>
+    <h2>Self-test</h2>
+    <div class="card"><p class="muted">Checks that everything Guardian reads on the printer is still there. Read only.
+      Run it after a printer firmware update.</p>
+      <button id="selftest" type="button">Run self-test</button><ul id="selftest-out"></ul></div>
+  </section>
   <p class="muted">Changes apply right away. No restart needed. Printer address, camera address and API keys
     stay in config.yaml and environment variables.</p>
 </main>

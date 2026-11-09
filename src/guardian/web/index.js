@@ -83,12 +83,51 @@ async function refreshStatus() {
     if (ap.pending_in_s != null) {
       notes.push("Guardian will pause the print in about " + ap.pending_in_s + " s unless the printer pauses itself. Reason: " + ap.pending_reason);
     }
+    const t2 = s.selftest || {};
+    if (t2.firmware_changed) notes.push("The printer firmware changed from " + t2.firmware_changed[0] + " to " + t2.firmware_changed[1] +
+      ". Guardian's checks were made on the old version. Watch the next print closely and run the self-test on the Settings page.");
+    if (t2.ok === false) notes.push("Self-test problems: " + t2.problems.map(x => x.name + " (" + x.detail + ")").join("; "));
     if (c.last_error) notes.push("Camera: " + c.last_error);
     if (em.enabled && !em.configured) notes.push("Email alerts are on but no Resend API key was found. Set your own key (see the README). Alerts will not be sent.");
     w.replaceChildren(...notes.map(n => el("div", { class: "notice warn" }, n)));
+    showPaused(p);
   } catch (e) {
     document.getElementById("conn").textContent = "Cannot reach Guardian: " + e.message;
   }
+}
+
+let pausedShown = false;
+async function showPaused(p) {
+  const box = document.getElementById("paused");
+  if (p.print_state !== "paused") { box.hidden = true; pausedShown = false; return; }
+  if (pausedShown) {  // keep the panel, just refresh the picture
+    const img = document.getElementById("paused-img");
+    if (img) img.src = "/api/camera/latest?t=" + Date.now() + (token() ? "&token=" + encodeURIComponent(token()) : "");
+    return;
+  }
+  pausedShown = true;
+  let inc = null, detail = null;
+  try {
+    const r = await api("/api/incidents?limit=1");
+    inc = r.incidents[0] || null;
+    if (inc) detail = await api("/api/incidents/" + encodeURIComponent(inc.uid));
+  } catch (e) { /* the panel still works without it */ }
+  const ai = detail && detail.findings && detail.findings.ai && detail.findings.ai.available ? detail.findings.ai.answer : null;
+  const img = el("img", { id: "paused-img", alt: "live camera picture", style: "max-width:420px;width:100%;border-radius:6px",
+    src: "/api/camera/latest?t=" + Date.now() + (token() ? "&token=" + encodeURIComponent(token()) : "") });
+  img.addEventListener("error", () => img.replaceWith(el("p", { class: "muted" }, "No live camera picture right now.")));
+  box.replaceChildren(
+    el("h2", {}, "Print is paused. Before you resume"),
+    el("p", {}, el("strong", {}, "Why: "), p.message || (inc ? inc.event_type : "not known")),
+    img,
+    ai ? el("div", {}, el("p", {}, el("strong", {}, "AI says: "), String(ai.summary || "")),
+      Array.isArray(ai.what_to_check) ? el("ul", {}, ...ai.what_to_check.map(x => el("li", {}, String(x)))) : null) : null,
+    el("ul", {},
+      el("li", {}, "Look at the print and the build plate. Remove anything loose."),
+      el("li", {}, "Check the filament path of the tool that was active" + (p.active_toolhead ? " (" + p.active_toolhead + ")" : "") + "."),
+      el("li", {}, "Resume or cancel on the printer screen or in the app. Guardian never resumes a print.")),
+    inc ? el("p", {}, el("a", { href: "/incident?uid=" + encodeURIComponent(inc.uid) }, "Open the incident for this pause")) : null);
+  box.hidden = false;
 }
 
 function row(i) {

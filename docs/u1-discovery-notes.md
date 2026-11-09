@@ -214,3 +214,17 @@ The printer's own build plate check (read from `/home/lava/klipper/klippy/extras
 - On a find it raises exception id 532, level 2, with code 1 "detected dirty bed", 2 "detected noodle",
   3 "detected residue", 4 "detected dirty nozzle", and then pauses the print (`PAUSE`).
 - Read from source code only. A real 532 has not been seen yet.
+
+
+## Printer logs over HTTP and the firmware version (2026-11-09)
+
+- Moonraker's file roots include `logs` (`/oem/printer_data/logs`, read only). `GET /server/files/logs/klippy.log`
+  works with HTTP range requests (`Range: bytes=-N`), so Guardian needs no SSH for logs.
+- klippy.log lines start with the UTC time of day only (`22:16:10.905:`). moonraker.log and unisrv.log have full dates.
+  The printer clock is UTC and was about 1 s behind the PC.
+- klippy.log only logs `Stats` while printing. Each Stats line has all heater temperatures and targets.
+- Print 1 failure, from klippy.log: during `[feed_loading] phase2` the filament wheel counters (`cnt_a_1`, `cnt_a_2`)
+  stopped at 419 while the feed motor counter kept going, then "hanging neutral", "auto load error: logic error!",
+  the `!!` line, `Pausing...` and "Raising exception: id:525". So the filament was not moving through the feeder.
+- `GET /printer/info` gives `software_version: 1.4.1.6_20260608141446`. Guardian uses it to notice firmware updates.
+

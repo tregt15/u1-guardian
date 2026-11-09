@@ -148,5 +148,16 @@ async function removeModel(name) {
   loadAi();
 }
 
+document.getElementById("selftest").addEventListener("click", async (ev) => {
+  ev.target.disabled = true;
+  const out = document.getElementById("selftest-out");
+  out.replaceChildren(el("li", { class: "muted" }, "Running..."));
+  try {
+    const r = await api("/api/selftest");
+    out.replaceChildren(...r.checks.map(c => el("li", {}, badge(c.ok ? "ok" : "problem", c.ok ? "ok" : "bad"), " " + c.name + ": " + c.detail)));
+  } catch (e) { out.replaceChildren(el("li", {}, "Could not run: " + e.message)); }
+  ev.target.disabled = false;
+});
+
 load();
 loadAi();

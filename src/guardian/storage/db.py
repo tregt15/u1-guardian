@@ -174,6 +174,15 @@ class Database:
                 " ORDER BY started_utc DESC, id DESC LIMIT ?", (limit,)).fetchall()
         return [int(r["duration_ms"]) for r in rows]
 
+    def recent_ok_pair_ms(self, previous: str | None, requested: str, limit: int = 60) -> list[int]:
+        """Durations of good changes between these two tools, newest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT duration_ms FROM toolchange_records WHERE result = 'ok' AND duration_ms IS NOT NULL"
+                " AND requested_tool = ? AND previous_tool IS ? ORDER BY started_utc DESC, id DESC LIMIT ?",
+                (requested, previous, limit)).fetchall()
+        return [int(r["duration_ms"]) for r in rows]
+
     def toolchange_stats(self) -> dict[str, Any]:
         with self._lock:
             rows = self._conn.execute(

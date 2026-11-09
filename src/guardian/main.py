@@ -38,10 +38,12 @@ from guardian.notify.email import ResendEmailChannel
 from guardian.notify.manager import NotificationManager
 from guardian.printer.autopause import AutoPause
 from guardian.printer.detectors import Detector
+from guardian.printer.health import HealthWatch
 from guardian.printer.logs import PrinterLogs
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
 from guardian.printer.toolchanger import ToolchangeMonitor
+from guardian import selftest
 from guardian import settings as settings_mod
 from guardian.storage.db import Database
 
@@ -108,6 +110,9 @@ class App:
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
                                     save_evidence=self._save_ai_pictures)
+        self.health = HealthWatch(self.clock, lambda: self.tracker.status, self._report)
+        self.selftest_result: dict | None = None
+        self.firmware_changed: tuple[str, str] | None = None  # (old, new)
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
@@ -118,7 +123,8 @@ class App:
         self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
                                          trigger_fn=self._report, started_utc=self.started_utc,
                                          notifier=self.notifier, settings_fn=self.apply_settings,
-                                         extra={"ai": self.ai}))
+                                         extra={"ai": self.ai, "fresh_frame": self._fresh_frame,
+                                                "selftest": self.run_selftest}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.disconnected", self._log_event)
@@ -192,6 +198,20 @@ class App:
         if problems:
             log.warning("printer logs for %s were partly unreadable: %s", uid, problems)
 
+    async def run_selftest(self) -> dict:
+        """Read-only checks. Also notices a printer firmware change since the last run."""
+        result = await selftest.run_checks(self.cfg)
+        self.selftest_result = result
+        old = selftest.remember_firmware(self.cfg.storage.resolved_data_dir(), result.get("firmware"))
+        if old:
+            self.firmware_changed = (old, result["firmware"])
+            log.warning("printer firmware changed from %s to %s", old, result["firmware"])
+            self.db.log("selftest", "warning", "printer firmware changed",
+                        {"old": old, "new": result["firmware"]})
+        if not result["ok"]:
+            log.warning("self-test found problems: %s", [c for c in result["checks"] if not c["ok"]])
+        return result
+
     def _sync_write_permissions(self) -> None:
         """The client may only send the two opt-in requests while their settings allow it."""
         self.client.allow_camera_start = self.snapshot_mode and self.cfg.camera.keepalive != "off"
@@ -243,6 +263,7 @@ class App:
                 "print_progress": meta.get("print_progress"),
                 "active_toolhead": meta.get("active_toolhead"),
                 "last_message_utc": to_iso(self.client.last_message_utc) if self.client.last_message_utc else None,
+                "message": self.tracker.status.get("print_stats", {}).get("message") or None,
             },
             "camera": {
                 "mode": mode, "running": self.capture.running, "viewer_active": viewing,
@@ -253,6 +274,13 @@ class App:
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
             "autopause": self.autopause.status(),
+            "selftest": {
+                "ok": self.selftest_result["ok"] if self.selftest_result else None,
+                "ran_utc": self.selftest_result["ran_utc"] if self.selftest_result else None,
+                "problems": [c for c in (self.selftest_result or {}).get("checks", []) if not c["ok"]],
+                "firmware": (self.selftest_result or {}).get("firmware"),
+                "firmware_changed": list(self.firmware_changed) if self.firmware_changed else None,
+            },
             "ai": {**self.ai.status(), "checks": self.vision.status()},
             "notifications": {"email": {
                 "enabled": self.cfg.notifications.email.enabled,
@@ -303,6 +331,7 @@ class App:
         ]
         if self.cfg.api.enabled:
             tasks.append(asyncio.create_task(self._serve_api(stop), name="api"))
+        tasks.append(asyncio.create_task(self._startup_selftest(), name="selftest"))
         try:
             await stop.wait()
         finally:
@@ -310,6 +339,12 @@ class App:
             await asyncio.gather(*tasks, return_exceptions=True)
             # Anything still open is finalized by the next start (recover_interrupted).
             self.db.close()
+
+    async def _startup_selftest(self) -> None:
+        try:
+            await self.run_selftest()
+        except Exception:  # noqa: BLE001 - only information. Never stop the app over it.
+            log.exception("self-test failed to run")
 
     async def _tick_loop(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -333,6 +368,10 @@ class App:
                 await self.vision.tick()
             except Exception:  # noqa: BLE001
                 log.exception("AI check tick failed")
+            try:
+                await self.health.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("health check tick failed")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:

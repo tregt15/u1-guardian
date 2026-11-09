@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask
@@ -299,6 +299,21 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(502, f"could not remove the model: {exc}") from exc
         await ai.refresh(force=True)
         return {"removed": model}
+
+    @app.get("/api/camera/latest", dependencies=[Depends(auth)])
+    async def camera_latest():
+        fn = ctx.extra.get("fresh_frame")
+        data = await fn() if fn else None
+        if not data:
+            raise HTTPException(404, "no live camera picture right now")
+        return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/selftest", dependencies=[Depends(auth)])
+    async def selftest_run() -> dict:
+        fn = ctx.extra.get("selftest")
+        if fn is None:
+            raise HTTPException(409, "self-test is not available in this mode")
+        return await fn()
 
     def logs_path(row) -> Path:
         return incident_dir(cfg.storage, row["id"], from_iso(row["first_trigger_utc"])) / "printer_logs.txt"
