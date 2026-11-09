@@ -176,6 +176,19 @@ class IncidentManager:
         await self._pin_new(inc)
         return TriggerResult("created", uid, iid)
 
+    async def add_note(self, event_type: str, source: str, metadata: dict[str, Any] | None = None,
+                       at: datetime | None = None) -> str | None:
+        """Add a non-trigger event to the open incident covering this moment, if there is one.
+        It shows in the timeline but does not extend or create an incident. Returns the uid or None."""
+        async with self._lock:
+            t = at or self.clock.now_utc()
+            inc = self._find_open_for(t)
+            if inc is None:
+                return None
+            self.db.add_event(inc.id, ts_utc=t, event_type=event_type, source=source, severity="info",
+                              is_trigger=False, metadata=metadata or {})
+            return inc.uid
+
     def _find_open_for(self, t: datetime) -> _Open | None:
         candidates = [i for i in self._open if t <= i.deadline]
         return max(candidates, key=lambda i: i.first_trigger) if candidates else None
@@ -254,8 +267,11 @@ class IncidentManager:
                              "pictures while the Snapmaker app or the printer screen is showing the camera.")
             else:
                 notes.append("No video segments were available for this window (camera down or buffer empty).")
+            notes += self._camera_session_notes(inc)
         else:
             notes += self._coverage_notes(inc, segs)
+            if notes:
+                notes += self._camera_session_notes(inc)
             if inc.pin_failed:
                 notes.append(f"{len(inc.pin_failed)} segment(s) could not be copied from the buffer.")
             if notes:
@@ -319,6 +335,17 @@ class IncidentManager:
             if gap > tol:
                 notes.append(f"Gap of {gap:.1f}s in the footage after {to_iso(a.end_utc)}.")
         return notes
+
+    def _camera_session_notes(self, inc: _Open) -> list[str]:
+        """Say why footage is missing when the printer told us it stopped the camera (verified message
+        on the U1, see camera/session_watch.py). Only added when there is already a coverage problem."""
+        out = []
+        for e in self.db.list_events(inc.id):
+            if e["event_type"] == "camera_stopped":
+                out.append(f"The printer turned the camera off at {e['ts_utc']}.")
+            elif e["event_type"] == "camera_started":
+                out.append(f"The printer turned the camera on at {e['ts_utc']}.")
+        return out
 
     def _write_report(self, inc: _Open) -> None:
         """Small report.json next to the clip. The full diagnostic report comes later."""

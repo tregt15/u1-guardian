@@ -73,7 +73,7 @@ function render() {
     el("span", {}, (e.is_trigger ? "Trigger: " : "") + e.event_type,
       e.repeat_count > 1 ? " (repeated " + e.repeat_count + " times)" : "",
       el("div", { class: "muted" }, e.source + (e.severity ? " / " + e.severity : "") + " / " + shortTime(e.ts_utc),
-        e.metadata && e.metadata.message ? " / " + e.metadata.message : ""))
+        e.metadata && (e.metadata.summary || e.metadata.message) ? " / " + (e.metadata.summary || e.metadata.message) : ""))
   )));
 
   // Details

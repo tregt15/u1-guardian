@@ -24,6 +24,7 @@ from guardian.blackbox.incident_manager import IncidentManager
 from guardian.bus import EventBus
 from guardian.camera.capture import Capture, FFmpegMissing, check_ffmpeg
 from guardian.camera.segment_buffer import SegmentBuffer
+from guardian.camera.session_watch import CameraSessionWatch
 from guardian.camera.snapshot import FrameBuffer, SnapshotCapture
 from guardian.clock import Clock, SystemClock, to_iso
 from guardian.config import Config, ConfigError, default_config_path, load_config
@@ -73,6 +74,8 @@ class App:
         self.detector = Detector(self.bus, self.tracker, self._report)
         self.toolchanger = ToolchangeMonitor(cfg.toolchanger, self.db, self.bus, self.tracker, self.clock,
                                              self._report)
+        self.camera_session = CameraSessionWatch(
+            self.bus, self.clock, note=lambda kind, meta: self.manager.add_note(kind, "printer_camera", meta))
         self.client = MoonrakerClient(cfg.printer.host, printer_port or cfg.printer.moonraker_port,
                                       self.bus, self.clock)
         if snapshot_mode:
@@ -138,6 +141,7 @@ class App:
             "camera": {
                 "mode": mode, "running": self.capture.running, "viewer_active": viewing,
                 "last_frame_utc": to_iso(last) if last else None, "last_error": self.capture.last_error,
+                **self.camera_session.status(),
             },
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
