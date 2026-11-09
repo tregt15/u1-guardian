@@ -17,8 +17,11 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
 import uvicorn
 
+from guardian.ai.diagnosis import Diagnoser
+from guardian.ai.vision import AiService, VisionWatcher
 from guardian.api.app import ApiContext, create_app
 from guardian.blackbox.incident_manager import IncidentManager
 from guardian.bus import EventBus
@@ -101,14 +104,21 @@ class App:
             send_pause=self.client.pause_print,
             note=lambda kind, meta: self.manager.add_note(kind, "guardian", meta),
             audit=lambda msg, meta: self.db.log("autopause", "warning", msg, meta))
+        self.ai = AiService(cfg.ai, self.clock)
+        self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
+                                    get_frame=self._fresh_frame, report=self._report,
+                                    save_evidence=self._save_ai_pictures)
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
             channels.append(ResendEmailChannel(cfg.notifications.email))
         self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock)
+        self.diagnoser = Diagnoser(cfg, self.db, self.ai, self.clock, self.ffmpeg,
+                                   notify=self.notifier.send_diagnosis)
         self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
                                          trigger_fn=self._report, started_utc=self.started_utc,
-                                         notifier=self.notifier, settings_fn=self.apply_settings))
+                                         notifier=self.notifier, settings_fn=self.apply_settings,
+                                         extra={"ai": self.ai}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.disconnected", self._log_event)
@@ -142,7 +152,30 @@ class App:
             if self.cfg.printer.fetch_logs:
                 await self._save_printer_logs(uid)
         except Exception:  # noqa: BLE001
-            log.exception("after-incident work failed for %s", uid)
+            log.exception("could not save printer logs for %s", uid)
+        await self.diagnoser.run(uid)  # needs the logs, so it runs after them. Never raises.
+
+    async def _fresh_frame(self) -> bytes | None:
+        """The current camera picture, only if pictures are really coming in right now."""
+        url = self.cfg.camera.snapshot_url
+        last = self.capture.last_frame_utc
+        if not url or last is None or (self.clock.now_utc() - last).total_seconds() > 3.0:
+            return None
+        async with httpx.AsyncClient(timeout=5.0) as c:
+            r = await c.get(url)
+        if r.status_code != 200 or not r.content.startswith(b"\xff\xd8"):  # JPEG start bytes
+            return None
+        return r.content
+
+    def _save_ai_pictures(self, result, frames: list[bytes]) -> None:
+        row = self.db.get_incident(result.incident_id)
+        if row is None:
+            return
+        folder = incident_dir(self.cfg.storage, row["id"], from_iso(row["first_trigger_utc"]))
+        folder.mkdir(parents=True, exist_ok=True)
+        n = len(list(folder.glob("ai_picture_*.jpg")))
+        for i, data in enumerate(frames, start=n + 1):
+            (folder / f"ai_picture_{i}.jpg").write_bytes(data)
 
     async def _save_printer_logs(self, uid: str) -> None:
         row = self.db.get_incident_by_uid(uid)
@@ -220,6 +253,7 @@ class App:
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
             "autopause": self.autopause.status(),
+            "ai": {**self.ai.status(), "checks": self.vision.status()},
             "notifications": {"email": {
                 "enabled": self.cfg.notifications.email.enabled,
                 # Only whether a key exists. The key itself is never shown.
@@ -295,6 +329,10 @@ class App:
                 await self.autopause.tick()
             except Exception:  # noqa: BLE001
                 log.exception("auto pause tick failed")
+            try:
+                await self.vision.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("AI check tick failed")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:

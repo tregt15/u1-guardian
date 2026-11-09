@@ -90,9 +90,27 @@ function render() {
   ];
   document.getElementById("details").replaceChildren(...d.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
 
-  document.getElementById("findings").replaceChildren(
-    el("p", { class: "muted" }, data.findings.note || ""),
-    el("p", {}, "Confirmed facts and possible causes will be listed here separately once the diagnostic engine exists. Until then, use the timeline and the video."));
+  const f = data.findings || {}, pics = (data.snapshots || {}).ai_pictures || [];
+  const out = [];
+  const ai = f.ai || {};
+  if (f.available && ai.available) {
+    const a = ai.answer || {};
+    const list = (title, items) => Array.isArray(items) && items.length ?
+      [el("strong", {}, title), el("ul", {}, ...items.map(x => el("li", {}, String(x))))] : [];
+    out.push(el("div", { class: "notice info" }, "AI diagnosis (" + ai.model + "). This is a guess from the saved evidence and can be wrong."),
+      el("p", {}, String(a.summary || "")),
+      el("p", {}, el("strong", {}, "Likely cause: "), String(a.likely_cause || "not given"), " (confidence: " + (a.confidence || "unknown") + ")"),
+      el("p", {}, el("strong", {}, "Safe to resume: "), String(a.safe_to_resume || "unknown")),
+      ...list("Evidence", a.evidence), ...list("What to check", a.what_to_check));
+  } else {
+    out.push(el("p", { class: "muted" }, ai.note || f.note || ""));
+  }
+  if (pics.length) {
+    out.push(el("strong", {}, "Pictures the AI checked"), el("div", { class: "row" }, ...pics.map(n =>
+      el("a", { href: "/api/incidents/" + encodeURIComponent(uid) + "/pictures/" + n + tokenQuery(), target: "_blank" },
+        el("img", { src: "/api/incidents/" + encodeURIComponent(uid) + "/pictures/" + n + tokenQuery(), style: "max-width:280px;border-radius:6px", alt: n })))));
+  }
+  document.getElementById("findings").replaceChildren(...out);
 
   document.getElementById("note").value = inc.user_note || "";
   document.getElementById("protect").checked = !!inc.protected;

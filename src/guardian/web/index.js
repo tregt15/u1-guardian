@@ -45,6 +45,13 @@ async function refreshStatus() {
     fill(document.getElementById("guardian"), [
       ["Version", g.version],
       ["Open incidents", String((s.incidents || {}).open ?? 0)],
+      ["Local AI", (() => {
+        const a = s.ai || {};
+        if (!a.enabled) return badge("off", "info");
+        const head = a.usable ? badge("ready", "ok") : !a.ollama_found ? badge("Ollama not found", "warn") : badge("model not downloaded", "warn");
+        const last = ((a.checks || {}).recent || [])[0];
+        return el("span", {}, head, last ? el("div", { class: "muted" }, "last " + last.check + " check " + ago(last.ts_utc) + ": " + last.verdict) : null);
+      })()],
       ["Auto pause", el("span", {}, (s.autopause || {}).enabled ? badge("on", "ok") : badge("off", "info"),
         (s.autopause || {}).last_pause_utc ? el("div", { class: "muted" }, "last paused " + ago(s.autopause.last_pause_utc)) : null)],
       ["Disk free", st.free_gb != null ? st.free_gb + " GB" : "unknown"],

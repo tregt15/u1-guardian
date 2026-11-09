@@ -35,7 +35,7 @@ from guardian import __version__, hostinfo
 from guardian import settings as settings_mod
 from guardian.bus import EventBus
 from guardian.clock import from_iso, to_iso
-from guardian.config import Config
+from guardian.config import AI_MODELS, Config
 from guardian.storage.db import Database
 from guardian.storage.paths import incident_dir
 
@@ -71,6 +71,14 @@ class TestBody(BaseModel):
 class SettingsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     changes: dict[str, Any]
+
+
+class AiModelBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    model: str | None = None
+
+
+AI_PICTURE_RE = re.compile(r"^ai_picture_[0-9]{1,3}\.jpg$")
 
 
 class ManualBody(BaseModel):
@@ -202,9 +210,8 @@ def create_app(ctx: ApiContext) -> FastAPI:
                      "marker_s": marker, "latency_offset_ms": cfg.camera.latency_offset_ms,
                      "actual_pre_s": row["actual_pre_s"], "actual_post_s": row["actual_post_s"],
                      "status": row["recording_status"], "notes": row["recording_notes"]},
-            # Honest: these are not built yet, so say so instead of showing empty "no problems".
-            "findings": {"available": False, "note": "The diagnostic engine is not built yet."},
-            "snapshots": {"available": False},
+            "findings": findings(row),
+            "snapshots": {"available": bool(pictures(row)), "ai_pictures": pictures(row)},
         }
 
     @app.get("/api/incidents/{uid}/video", dependencies=[Depends(auth)])
@@ -214,6 +221,84 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(404, "no clip for this incident")
         media = "video/mp4" if path.suffix == ".mp4" else "video/x-matroska"
         return FileResponse(path, media_type=media)  # supports HTTP range requests
+
+    def folder_of(row) -> Path:
+        return incident_dir(cfg.storage, row["id"], from_iso(row["first_trigger_utc"]))
+
+    def findings(row) -> dict:
+        path = folder_of(row) / "ai_diagnosis.json"
+        if path.is_file():
+            try:
+                return {"ai": json.loads(path.read_text(encoding="utf-8")), "available": True}
+            except ValueError:
+                pass
+        why = ("Turn on local AI in Settings to get a diagnosis." if not cfg.ai.enabled
+               else "No AI diagnosis for this incident (not needed, still running, or the AI was not available).")
+        return {"available": False, "note": why}
+
+    def pictures(row) -> list[str]:
+        folder = folder_of(row)
+        if not folder.is_dir():
+            return []
+        return sorted(p.name for p in folder.glob("ai_picture_*.jpg") if AI_PICTURE_RE.match(p.name))
+
+    @app.get("/api/incidents/{uid}/pictures/{name}", dependencies=[Depends(auth)])
+    async def incident_picture(uid: str, name: str):
+        row = get_row(uid)
+        if not AI_PICTURE_RE.match(name):
+            raise HTTPException(404, "no such picture")
+        path = folder_of(row) / name
+        if not path.is_file():
+            raise HTTPException(404, "no such picture")
+        return FileResponse(path, media_type="image/jpeg")
+
+    def ai_service():
+        ai = ctx.extra.get("ai")
+        if ai is None:
+            raise HTTPException(409, "AI is not available in this mode")
+        return ai
+
+    @app.get("/api/ai/status", dependencies=[Depends(auth)])
+    async def ai_status() -> dict:
+        ai = ai_service()
+        await ai.refresh(force=True)
+        installed: dict[str, int] = {}
+        if ai.ollama_version:
+            try:
+                installed = await ai.ollama.models()
+            except Exception:  # noqa: BLE001
+                installed = {}
+        return {**ai.status(), "installed": installed,
+                "install_help": "https://ollama.com/download",
+                "models": {k: v for k, v in AI_MODELS.items()}}
+
+    @app.post("/api/ai/download", dependencies=[Depends(auth)])
+    async def ai_download(body: AiModelBody) -> dict:
+        ai = ai_service()
+        model = body.model or cfg.ai.model
+        if model not in AI_MODELS:
+            raise HTTPException(400, "unknown model")
+        if ai.ollama.pull_state.running:
+            raise HTTPException(409, "a download is already running")
+        if not await ai.ollama.version():
+            raise HTTPException(409, "Ollama was not found. Install it first (https://ollama.com/download).")
+        task = asyncio.create_task(ai.ollama.pull(model))
+        ctx.extra.setdefault("tasks", set()).add(task)
+        task.add_done_callback(lambda t: ctx.extra["tasks"].discard(t))
+        return {"started": model}
+
+    @app.delete("/api/ai/model", dependencies=[Depends(auth)])
+    async def ai_delete(body: AiModelBody) -> dict:
+        ai = ai_service()
+        model = body.model or cfg.ai.model
+        if model not in AI_MODELS:
+            raise HTTPException(400, "unknown model")
+        try:
+            await ai.ollama.delete(model)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"could not remove the model: {exc}") from exc
+        await ai.refresh(force=True)
+        return {"removed": model}
 
     def logs_path(row) -> Path:
         return incident_dir(cfg.storage, row["id"], from_iso(row["first_trigger_utc"])) / "printer_logs.txt"
@@ -242,6 +327,10 @@ def create_app(ctx: ApiContext) -> FastAPI:
             plogs = logs_path(row)
             if plogs.is_file():
                 z.write(plogs, arcname=plogs.name)
+            for extra_name in ["ai_diagnosis.json", *pictures(row)]:
+                extra_path = folder_of(row) / extra_name
+                if extra_path.is_file():
+                    z.write(extra_path, arcname=extra_name)
             detail = await get_incident(uid)
             z.writestr("report.json", json.dumps(
                 {"incident": detail["incident"], "events": detail["events"], "clip": detail["clip"]},

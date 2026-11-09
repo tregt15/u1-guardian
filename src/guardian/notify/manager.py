@@ -39,9 +39,11 @@ class Channel(Protocol):
 
 @dataclass
 class _Job:
-    kind: str  # incident_created | clip_ready
+    kind: str  # incident_created | clip_ready | diagnosis
     uid: str
     escalated: bool = False
+    subject: str | None = None  # prebuilt message (diagnosis)
+    text: str | None = None
 
 
 class NotificationManager:
@@ -78,6 +80,10 @@ class NotificationManager:
     def _on_finalized(self, topic: str, p: dict) -> None:
         self._enqueue(_Job("clip_ready", p["uid"]))
 
+    async def send_diagnosis(self, uid: str, subject: str, text: str) -> None:
+        """Queue an AI diagnosis message for an incident. Same rules: send_on, min_severity, log."""
+        self._enqueue(_Job("diagnosis", uid, subject=subject, text=text))
+
     # ---- worker ----
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -111,6 +117,8 @@ class NotificationManager:
             if not job.escalated and last and (now - last) < timedelta(seconds=self.cfg.cooldown_s):
                 return self._skip(job, f"cooldown ({self.cfg.cooldown_s:g}s per event type)")
             subject, text = self._created_message(row, job.escalated)
+        elif kind == "diagnosis":
+            subject, text = job.subject or "[Guardian] AI diagnosis", job.text or ""
         else:
             if job.uid not in self._created_sent:
                 return self._skip(job, "no created message was sent for this incident")

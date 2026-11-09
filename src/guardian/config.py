@@ -148,7 +148,8 @@ class NotificationsConfig(_Section):
     base_url: str = "http://127.0.0.1:8080"  # used for links in messages
     min_severity: Severity = "warning"
     cooldown_s: float = Field(default=60.0, ge=0)  # per event type
-    send_on: list[Literal["incident_created", "clip_ready", "health"]] = ["incident_created", "clip_ready"]
+    send_on: list[Literal["incident_created", "clip_ready", "diagnosis", "health"]] = [
+        "incident_created", "clip_ready", "diagnosis"]
     attach_clip: bool = False  # not built. Clips never leave your network.
     email: EmailConfig = EmailConfig()
 
@@ -206,8 +207,35 @@ class ToolchangerConfig(_Section):
 # values mean is UNVERIFIED.
 PAUSABLE_EVENTS = (
     "bed_not_clear", "spaghetti_detected", "residue_detected", "dirty_nozzle_detected",
+    "ai_bed_not_clear", "ai_print_failure",
     "toolchange_wrong_tool", "toolchange_error", "toolchange_timeout", "filament_feed_error",
 )
+
+AI_MODELS = {  # Ollama model name -> what the settings page shows. Sizes are Ollama's download sizes.
+    "qwen2.5vl:7b": "Qwen2.5-VL 7B (about 6 GB, better)",
+    "gemma3:4b": "Gemma 3 4B (about 3.3 GB, faster)",
+}
+
+
+class AiConfig(_Section):
+    """Local AI through Ollama (an outside program, like FFmpeg). Off until the user turns it on.
+    Nothing is sent to the internet: Guardian only talks to the Ollama address below."""
+
+    enabled: bool = False
+    ollama_url: str = "http://127.0.0.1:11434"
+    model: Literal[tuple(AI_MODELS)] = "qwen2.5vl:7b"  # type: ignore[valid-type]
+    bed_check: bool = True  # look at the build plate at the start of a print
+    print_check: bool = True  # look for spaghetti and other failures during a print
+    print_check_every_s: float = Field(default=60.0, ge=15, le=3600)
+    min_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    diagnose: Literal["off", "stops", "all"] = "stops"  # write an AI diagnosis after an incident
+    timeout_s: float = Field(default=180.0, ge=10, le=1800)
+
+    @model_validator(mode="after")
+    def _check_url(self) -> AiConfig:
+        if not (self.ollama_url.startswith("http://") or self.ollama_url.startswith("https://")):
+            raise ValueError("ai.ollama_url must start with http:// or https://")
+        return self
 
 
 class AutopauseConfig(_Section):
@@ -226,6 +254,7 @@ class Config(_Section):
     blackbox: BlackboxConfig = BlackboxConfig()
     toolchanger: ToolchangerConfig = ToolchangerConfig()
     autopause: AutopauseConfig = AutopauseConfig()
+    ai: AiConfig = AiConfig()
     storage: StorageConfig = StorageConfig()
     api: ApiConfig = ApiConfig()
     notifications: NotificationsConfig = NotificationsConfig()

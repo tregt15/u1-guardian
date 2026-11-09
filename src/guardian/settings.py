@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from guardian.config import PAUSABLE_EVENTS, Config
+from guardian.config import AI_MODELS, PAUSABLE_EVENTS, Config
 
 log = logging.getLogger(__name__)
 
@@ -36,11 +36,30 @@ FIELDS: list[dict[str, Any]] = [
          "spaghetti_detected": "Spaghetti (printer AI)",
          "residue_detected": "Residue (printer AI)",
          "dirty_nozzle_detected": "Dirty nozzle (printer AI)",
+         "ai_bed_not_clear": "Build plate not clear (Guardian AI)",
+         "ai_print_failure": "Print failure such as spaghetti (Guardian AI)",
          "toolchange_wrong_tool": "Tool change: wrong tool",
          "toolchange_error": "Tool change: printer error",
          "toolchange_timeout": "Tool change: stuck",
          "filament_feed_error": "Filament feed error",
      }, "help": "Problems that can pause a print."},
+    {"key": "ai.enabled", "group": "AI (local)", "label": "Use local AI", "kind": "bool",
+     "help": "Needs Ollama (free, runs on this computer) and a downloaded model. See the AI box below."},
+    {"key": "ai.model", "group": "AI (local)", "label": "Model", "kind": "choice", "options": dict(AI_MODELS),
+     "help": "Bigger is better but slower. Needs a graphics card or a fast computer. Too big for a Raspberry Pi."},
+    {"key": "ai.ollama_url", "group": "AI (local)", "label": "Ollama address", "kind": "text",
+     "help": "Leave as is if Ollama runs on this computer. A Pi can use Ollama on another computer."},
+    {"key": "ai.bed_check", "group": "AI (local)", "label": "Check the build plate when a print starts", "kind": "bool",
+     "help": ""},
+    {"key": "ai.print_check", "group": "AI (local)", "label": "Check for failures during a print", "kind": "bool",
+     "help": "Spaghetti, a part that broke loose, a blob on the nozzle."},
+    {"key": "ai.print_check_every_s", "group": "AI (local)", "label": "Check every (seconds)", "kind": "number",
+     "min": 15, "max": 3600, "help": ""},
+    {"key": "ai.min_confidence", "group": "AI (local)", "label": "How sure the AI must be (0 to 1)", "kind": "number",
+     "min": 0, "max": 1, "help": "Higher means fewer false alarms but more missed problems."},
+    {"key": "ai.diagnose", "group": "AI (local)", "label": "Write a diagnosis after", "kind": "choice",
+     "options": {"off": "Never", "stops": "Prints that stop or fail", "all": "Every incident"},
+     "help": "The AI reads the timeline, logs and pictures and guesses the cause. Sent by email if email is on."},
     {"key": "toolchanger.enabled", "group": "Tool changes", "label": "Watch tool changes", "kind": "bool", "help": ""},
     {"key": "toolchanger.timeout_s", "group": "Tool changes", "label": "Stuck after (seconds)",
      "kind": "number_or_empty", "min": 1, "max": 600,
