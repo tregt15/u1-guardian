@@ -212,7 +212,10 @@ class IncidentManager:
         async with self._lock:
             self.buffer.refresh()
             now = self.clock.now_utc()
-            seg_len = timedelta(seconds=self.cfg.camera.segment_length_s)
+            # Wait for the last segment to close. A snapshot frame is only final once the next
+            # frame arrives, or after max_frame_gap_s alone, so wait that long too.
+            seg_len = timedelta(seconds=self.cfg.camera.segment_length_s
+                                + (self.cfg.camera.max_frame_gap_s if self.cfg.camera.snapshot_url else 0.0))
             for inc in list(self._open):
                 await self._pin_new(inc)
                 if now >= inc.deadline + seg_len:
@@ -258,7 +261,9 @@ class IncidentManager:
             if notes:
                 status = "partial"
             try:
-                clip = await asyncio.to_thread(assemble, self.ffmpeg, self.ffprobe, paths, inc.dir)
+                frames = paths[0].suffix.lower() in (".jpg", ".jpeg")  # snapshot camera: one JPEG per segment
+                durations = [s.duration_s for s in segs] if frames else None
+                clip = await asyncio.to_thread(assemble, self.ffmpeg, self.ffprobe, paths, inc.dir, durations)
                 info = await asyncio.to_thread(probe, self.ffprobe, clip)
                 expected = sum(s.duration_s for s in segs)
                 if info.duration_s < expected - TOL_S:
@@ -287,8 +292,9 @@ class IncidentManager:
 
     def _coverage_notes(self, inc: _Open, segs: list[Segment]) -> list[str]:
         notes: list[str] = []
-        # Snapshot mode has about 1 frame per second, so normal spacing is bigger than 0.5 s.
-        tol = self.cfg.camera.max_frame_gap_s if self.cfg.camera.snapshot_url else TOL_S
+        # Same strict rule for every camera. In snapshot mode a frame already covers the time up to
+        # the next frame, so normal 1 frame per second spacing does not show up as a gap.
+        tol = TOL_S
         lead = (segs[0].start_utc - inc.pre_start).total_seconds()
         if lead > tol:
             notes.append(

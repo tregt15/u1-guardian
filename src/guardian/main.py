@@ -24,6 +24,7 @@ from guardian.blackbox.incident_manager import IncidentManager
 from guardian.bus import EventBus
 from guardian.camera.capture import Capture, FFmpegMissing, check_ffmpeg
 from guardian.camera.segment_buffer import SegmentBuffer
+from guardian.camera.snapshot import FrameBuffer, SnapshotCapture
 from guardian.clock import Clock, SystemClock, to_iso
 from guardian.config import Config, ConfigError, default_config_path, load_config
 from guardian.env import load_dotenv
@@ -60,15 +61,21 @@ class App:
         cfg.storage.resolved_data_dir().mkdir(parents=True, exist_ok=True)
         self.db = Database(cfg.storage.db_path, self.clock)
         self.bus = EventBus()
-        self.buffer = SegmentBuffer(cfg.storage.resolved_buffer_dir(), cfg.camera.segment_length_s, self.clock)
+        snapshot_mode = bool(cfg.camera.snapshot_url)
+        if snapshot_mode:  # the U1: one JPEG about every second, only while somebody views the camera
+            self.buffer = FrameBuffer(cfg.storage.resolved_buffer_dir(), cfg.camera.max_frame_gap_s, self.clock)
+        else:
+            self.buffer = SegmentBuffer(cfg.storage.resolved_buffer_dir(), cfg.camera.segment_length_s, self.clock)
         self.buffer.clear_files()  # old buffer content is not trusted after a restart
         self.manager = IncidentManager(cfg, self.db, self.buffer, self.clock, self.ffmpeg, self.ffprobe, self.bus)
         self.tracker = StateTracker(self.bus)  # must subscribe before the detector
         self.detector = Detector(self.bus, self.tracker, self._report)
         self.client = MoonrakerClient(cfg.printer.host, printer_port or cfg.printer.moonraker_port,
                                       self.bus, self.clock)
-        self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin,
-                               active=self._buffer_wanted)
+        if snapshot_mode:
+            self.capture = SnapshotCapture(cfg.camera, self.buffer, self.clock, active=self._buffer_wanted)
+        else:
+            self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin)
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:

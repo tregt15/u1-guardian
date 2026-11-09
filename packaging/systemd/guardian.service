@@ -1,0 +1,25 @@
+# U1 Guardian systemd unit. UNTESTED on a real Pi. The install script fills in the @...@ values.
+[Unit]
+Description=U1 Guardian (Snapmaker U1 diagnostic and failure black box)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@INSTALL_DIR@
+# Secrets (API token, your own Resend key) live here, readable only by root and the service user.
+EnvironmentFile=-/etc/u1-guardian/env
+ExecStart=@INSTALL_DIR@/.venv/bin/python -m guardian.main --config /etc/u1-guardian/config.yaml
+Restart=on-failure
+RestartSec=5
+# Keep the Pi quiet: logs go to journald (which is small on Pi OS), not to the SD card.
+Nice=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/u1-guardian /dev/shm/u1-guardian
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

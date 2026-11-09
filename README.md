@@ -58,6 +58,10 @@ Resend's test sender (`onboarding@resend.dev`) only delivers to the email addres
 account. To send to other people, verify your own domain in Resend and change `from_addr`.
 Messages are plain text. Clips are never attached, so video never leaves your network.
 
+## Raspberry Pi
+
+See `docs/pi-setup.md`. The install script and service file are untested on a real Pi so far.
+
 ## Requirements
 
 - Python 3.11 or newer
