@@ -61,3 +61,31 @@ async def test_printer_failure_saves_verified_clip(tmp_path):
     assert abs(shown - expected) <= cfg.camera.segment_length_s + 1.0, (shown, expected)
     assert row["first_trigger_utc"] > row["start_time_utc"]
     assert datetime.now(timezone.utc) > trig
+
+
+async def test_app_keeps_running_when_the_dashboard_port_is_busy(tmp_path):
+    """A port clash must never take down recording or printer monitoring."""
+    import socket
+
+    from guardian.config import ApiConfig
+
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen()
+    port = blocker.getsockname()[1]
+    cfg = sim.make_config(tmp_path, pre_s=6, post_s=4)
+    cfg = cfg.model_copy(update={"api": ApiConfig(enabled=True, port=port)})
+    mock = MockMoonraker([[]])
+    await mock.start()
+    app = App(cfg, printer_port=mock.port)
+    stop = asyncio.Event()
+    task = asyncio.create_task(app.run(stop))
+    try:
+        await asyncio.sleep(3)
+        assert not task.done()  # still running even though the dashboard could not start
+        assert app.client.connected  # and still watching the printer
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+        blocker.close()

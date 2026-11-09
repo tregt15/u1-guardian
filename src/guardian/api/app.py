@@ -219,6 +219,8 @@ def create_app(ctx: ApiContext) -> FastAPI:
             clip = clip_path(row)
             if clip:
                 z.write(clip, arcname=clip.name)
+                for extra in clip.parent.glob("clip_original.*"):  # full quality original, if kept
+                    z.write(extra, arcname=extra.name)
             detail = await get_incident(uid)
             z.writestr("report.json", json.dumps(
                 {"incident": detail["incident"], "events": detail["events"], "clip": detail["clip"]},

@@ -116,3 +116,16 @@ Verified by reading logs only (printer `unisrv.log`, Moonraker log, and the log 
   for it. Guardian does not send `camera.start_monitor` and cannot start the camera on its own.
 - The printer's web server access log is empty, so which client asked for what could only be read from Moonraker's
   log and the helper's log.
+
+
+## The camera session lapses on its own (2026-11-09)
+
+Seen in `unisrv.log` and in Guardian's frame times, with the camera view open on a viewer:
+
+- The monitoring session is not continuous. At 06:18:32 UTC the pictures stopped. At 06:19:06 a new
+  `camera.start_monitor` arrived and the log said "Current monitor state: lan is false, wan is false", so the session had
+  lapsed before the renewal. That is a gap of about 30 seconds in the picture feed, even though a viewer was open.
+- Guardian reported this honestly: the incident that spanned the gap was `partial` ("Post-roll is 1.3s short").
+  Expect this kind of gap about every 5 to 10 minutes while a viewer keeps the camera on. UNVERIFIED how regular it is.
+- The printer's own AI asks for a picture about every 45 seconds during a print (`camera.detect_capture` in the log).
+  The `print_check` (noodle) model is loaded inside `unisrv`. This is separate from the viewer's snapshot file.

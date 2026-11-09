@@ -148,16 +148,26 @@ class App:
     async def _serve_api(self, stop: asyncio.Event) -> None:
         a = self.cfg.api
         server = _Server(uvicorn.Config(self.api, host=a.bind, port=a.port, log_level="warning"))
-        task = asyncio.create_task(server.serve())
+
+        async def serve() -> None:
+            # uvicorn calls sys.exit(1) when it cannot bind (for example the port is in use). A
+            # SystemExit inside a task would stop the whole program, so catch it here: recording and
+            # printer monitoring must keep running without the dashboard.
+            try:
+                await server.serve()
+            except SystemExit:
+                log.error("The dashboard could not start on %s:%s (is the port already in use?). "
+                          "Recording and monitoring continue without it.", a.bind, a.port)
+            except Exception:  # noqa: BLE001
+                log.exception("The dashboard stopped unexpectedly. Recording and monitoring continue.")
+
+        task = asyncio.create_task(serve())
         log.info("API and dashboard on http://%s:%s/", a.bind, a.port)
         try:
             await stop.wait()
         finally:
             server.should_exit = True
-            try:
-                await task
-            except (SystemExit, Exception):  # noqa: BLE001
-                pass
+            await task
 
     # ---- run ----
 

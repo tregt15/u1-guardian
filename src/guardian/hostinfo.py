@@ -6,8 +6,10 @@ and never raises. On a Raspberry Pi these show CPU temperature and free memory.
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -63,6 +65,14 @@ def folder_size_gb(path: Path) -> float:
     except OSError:
         pass
     return round(total / 1e9, 3)
+
+
+def low_priority_kwargs() -> dict:
+    """Extra subprocess arguments that run a job at low CPU priority (for the one video encode
+    at incident time, so it never competes with capture on a small Pi)."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS}
+    return {"preexec_fn": lambda: os.nice(10)}
 
 
 def describe() -> dict:

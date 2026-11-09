@@ -59,6 +59,9 @@ class BlackboxConfig(_Section):
     buffer_mode: Literal["printing", "always"] = "printing"
     max_incident_s: float = Field(default=300.0, gt=0)
     duplicate_window_s: float = Field(default=5.0, ge=0)
+    # Also save a browser-playable H.264 MP4 when the camera gives MJPEG or JPEG pictures
+    # (browsers cannot play those). The original is kept as clip_original.mkv.
+    make_playable_copy: bool = True
 
     @model_validator(mode="after")
     def _check_lengths(self) -> BlackboxConfig:

@@ -43,6 +43,8 @@ function render() {
   note.replaceChildren();
   if (inc.recording_status === "recording") {
     note.append(el("div", { class: "notice info" }, "Still recording. Reload in a minute for the clip."));
+  } else if (inc.recording_status === "complete" && inc.recording_notes) {
+    note.append(el("div", { class: "notice info" }, inc.recording_notes));
   } else if (inc.recording_status !== "complete") {
     note.append(el("div", { class: "notice " + (inc.recording_status === "partial" ? "warn" : "bad") },
       "This footage is NOT complete (" + inc.recording_status + "). ", inc.recording_notes || "No reason was recorded."));

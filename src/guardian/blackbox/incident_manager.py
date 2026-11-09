@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from guardian.blackbox.assembler import AssemblyError, assemble, probe
+from guardian.blackbox.assembler import AssemblyError, assemble, make_playable, probe
 from guardian.bus import EventBus
 from guardian.camera.segment_buffer import Segment, SegmentBuffer
 from guardian.clock import Clock, from_iso, to_iso
@@ -272,6 +272,16 @@ class IncidentManager:
                         f"Clip is {info.duration_s:.1f}s but segments add up to {expected:.1f}s. "
                         "A segment may be damaged."
                     )
+                if info.video_codec != "h264" and self.cfg.blackbox.make_playable_copy:
+                    try:
+                        clip = await asyncio.to_thread(make_playable, self.ffmpeg, clip)
+                        playable = await asyncio.to_thread(probe, self.ffprobe, clip)
+                        if abs(playable.duration_s - info.duration_s) > 1.0:
+                            raise AssemblyError("playable copy has a different length")
+                    except AssemblyError as exc:
+                        # The footage itself is fine. Only the browser copy failed.
+                        notes.append(f"Browser-playable copy failed ({exc}). The original clip is kept.")
+                        clip = next(inc.dir.glob("clip_original.mkv"), None) or next(inc.dir.glob("clip.mkv"))
                 clip_rel = clip.relative_to(self.cfg.storage.resolved_data_dir()).as_posix()
                 shutil.rmtree(inc.dir / "segments", ignore_errors=True)  # kept only if assembly fails
             except AssemblyError as exc:

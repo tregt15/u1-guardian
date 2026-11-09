@@ -52,7 +52,9 @@ async def test_mjpeg_path(tmp_path):
     for uid in {r.uid for r in env.results}:
         problems, _ = sim.verify_incident(env, uid)
         assert not problems, problems
-    assert all(row["recording_path"].endswith(".mkv") for row in _rows(env))  # MJPEG stays in MKV
+    for row in _rows(env):  # MJPEG is re-encoded once to a browser-playable MP4, original kept
+        assert row["recording_path"].endswith("clip.mp4")
+        assert (cfg.storage.resolved_data_dir() / row["recording_path"]).with_name("clip_original.mkv").is_file()
 
 
 async def test_dedupe_and_merge_make_one_incident(tmp_path):
