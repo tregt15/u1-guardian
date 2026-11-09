@@ -92,11 +92,40 @@ class StorageConfig(_Section):
         return self.resolved_data_dir() / "incidents"
 
 
+LOCAL_BINDS = {"127.0.0.1", "::1", "localhost"}
+
+
+class ApiConfig(_Section):
+    enabled: bool = True
+    bind: str = "127.0.0.1"
+    port: int = Field(default=8080, ge=1, le=65535)
+    token: str = ""  # or env var GUARDIAN_API_TOKEN. Never put a real token in a committed file.
+    base_url: str = ""  # used for links in messages later
+
+    @property
+    def effective_token(self) -> str:
+        return os.environ.get("GUARDIAN_API_TOKEN", "") or self.token
+
+    @property
+    def is_local(self) -> bool:
+        return self.bind in LOCAL_BINDS
+
+    @model_validator(mode="after")
+    def _need_token_when_exposed(self) -> ApiConfig:
+        if self.enabled and not self.is_local and not self.effective_token:
+            raise ValueError(
+                "api.bind is not local, so a token is required. Set api.token or the "
+                "GUARDIAN_API_TOKEN environment variable."
+            )
+        return self
+
+
 class Config(_Section):
     printer: PrinterConfig = PrinterConfig()
     camera: CameraConfig = CameraConfig()
     blackbox: BlackboxConfig = BlackboxConfig()
     storage: StorageConfig = StorageConfig()
+    api: ApiConfig = ApiConfig()
 
 
 def default_config_path() -> Path:

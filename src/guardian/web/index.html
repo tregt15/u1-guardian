@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>U1 Guardian</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>U1 Guardian</h1>
+  <div class="row"><span id="conn" class="muted">connecting...</span>
+    <button id="manual" class="primary" title="Save the footage around this moment">Save incident now</button></div>
+</header>
+<main>
+  <div id="warnings"></div>
+  <div class="grid">
+    <div class="card"><h2>Printer</h2><dl class="kv" id="printer"></dl></div>
+    <div class="card"><h2>Camera</h2><dl class="kv" id="camera"></dl></div>
+    <div class="card"><h2>Guardian</h2><dl class="kv" id="guardian"></dl></div>
+  </div>
+  <section>
+    <h2>Incidents</h2>
+    <div class="filters">
+      <select id="f-sev"><option value="">any severity</option><option>info</option><option>warning</option><option>critical</option></select>
+      <input id="f-type" placeholder="type, e.g. manual" size="18">
+      <input id="f-q" placeholder="file name contains" size="20">
+      <button id="f-go">Filter</button>
+    </div>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>When</th><th>What</th><th>Severity</th><th>Print</th><th>Recording</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="muted" hidden>No incidents yet.</p>
+    </div>
+    <p class="muted"><span id="count"></span> <button id="more" hidden>Show more</button></p>
+  </section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/index.js"></script>
+</body>
+</html>

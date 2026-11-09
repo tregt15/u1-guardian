@@ -35,3 +35,9 @@ storage:
   max_age_days: 90
   max_incidents: 500
   warn_free_gb: 2
+
+api:
+  enabled: true
+  bind: 127.0.0.1             # local only. To reach it from other computers use 0.0.0.0 and set a token.
+  port: 8080
+  token: ""                   # or env var GUARDIAN_API_TOKEN. Required when bind is not local.

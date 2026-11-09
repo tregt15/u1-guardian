@@ -103,6 +103,40 @@ class Database:
         with self._lock:
             return self._conn.execute(sql, args).fetchall()
 
+    def query_incidents(self, *, event_type: str | None = None, severity: str | None = None,
+                        since: str | None = None, until: str | None = None, q: str | None = None,
+                        limit: int = 50, offset: int = 0) -> tuple[list[sqlite3.Row], int]:
+        """Filtered list, newest first. Returns (rows, total count). All values are bound
+        parameters, never pasted into the SQL."""
+        where, args = [], []
+        if event_type:
+            where.append("event_type = ?"); args.append(event_type)
+        if severity:
+            where.append("severity = ?"); args.append(severity)
+        if since:
+            where.append("first_trigger_utc >= ?"); args.append(since)
+        if until:
+            where.append("first_trigger_utc <= ?"); args.append(until)
+        if q:
+            escaped = q.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            where.append("print_filename LIKE ? ESCAPE '!'"); args.append(f"%{escaped}%")
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        with self._lock:
+            total = self._conn.execute(f"SELECT COUNT(*) AS n FROM incidents{clause}", args).fetchone()["n"]
+            rows = self._conn.execute(
+                f"SELECT * FROM incidents{clause} ORDER BY first_trigger_utc DESC, id DESC LIMIT ? OFFSET ?",
+                (*args, limit, offset)).fetchall()
+        return rows, int(total)
+
+    def delete_incident(self, incident_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
+
+    def list_toolchanges(self, limit: int = 100) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM toolchange_records ORDER BY started_utc DESC LIMIT ?", (limit,)).fetchall()
+
     # ---- incident events ----
 
     def add_event(

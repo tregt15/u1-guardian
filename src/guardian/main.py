@@ -10,16 +10,21 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
+from datetime import timedelta
 from pathlib import Path
 
+import uvicorn
+
+from guardian.api.app import ApiContext, create_app
 from guardian.blackbox.incident_manager import IncidentManager
 from guardian.bus import EventBus
 from guardian.camera.capture import Capture, FFmpegMissing, check_ffmpeg
 from guardian.camera.segment_buffer import SegmentBuffer
-from guardian.clock import Clock, SystemClock
+from guardian.clock import Clock, SystemClock, to_iso
 from guardian.config import Config, ConfigError, load_config
 from guardian.printer.detectors import Detector
 from guardian.printer.moonraker_client import MoonrakerClient
@@ -29,6 +34,18 @@ from guardian.storage.db import Database
 log = logging.getLogger("guardian")
 
 TICK_S = 1.0
+VIEWER_ACTIVE_S = 5.0  # a snapshot newer than this means somebody is viewing the camera
+
+
+class _Server(uvicorn.Server):
+    """uvicorn without its own signal handlers. Guardian handles stopping itself."""
+
+    @contextlib.contextmanager
+    def capture_signals(self):
+        yield
+
+    def install_signal_handlers(self) -> None:  # older uvicorn versions
+        pass
 
 
 class App:
@@ -49,6 +66,9 @@ class App:
                                       self.bus, self.clock)
         self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin,
                                active=self._buffer_wanted)
+        self.started_utc = self.clock.now_utc()
+        self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
+                                         trigger_fn=self._report, started_utc=self.started_utc))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.disconnected", self._log_event)
@@ -59,7 +79,9 @@ class App:
     # ---- wiring ----
 
     async def _report(self, event_type, source, severity, key, metadata):
-        return await self.manager.report_incident(event_type, source, severity, key, metadata)
+        # Every trigger, from any source, carries the current printer state (file, progress, tool head).
+        meta = {**self.tracker.incident_metadata(), **(metadata or {})}
+        return await self.manager.report_incident(event_type, source, severity, key, meta)
 
     def _buffer_wanted(self) -> bool:
         """buffer_mode: `printing` buffers while a print is heating, running or paused (spec 6.1).
@@ -71,10 +93,50 @@ class App:
 
     async def _on_manual(self, topic: str, payload) -> None:
         meta = payload if isinstance(payload, dict) else {}
-        await self._report("manual", "manual", "info", None, {**self.tracker.incident_metadata(), **meta})
+        await self._report("manual", "manual", "info", None, meta)
 
     def _log_event(self, topic: str, payload) -> None:
         log.info("%s %s", topic, payload)
+
+    def status(self) -> dict:
+        """Live state for /api/status."""
+        meta = self.tracker.incident_metadata()
+        cam = self.cfg.camera
+        mode = "snapshot" if cam.snapshot_url else ("stream" if cam.source_url else "standin")
+        last = self.capture.last_frame_utc
+        if mode == "snapshot":
+            viewing = bool(last and (self.clock.now_utc() - last) <= timedelta(seconds=VIEWER_ACTIVE_S))
+        else:
+            viewing = self.capture.running
+        return {
+            "printer": {
+                "connected": self.client.connected,
+                "print_state": self.tracker.print_state,
+                "print_filename": meta.get("print_filename"),
+                "print_progress": meta.get("print_progress"),
+                "active_toolhead": meta.get("active_toolhead"),
+                "last_message_utc": to_iso(self.client.last_message_utc) if self.client.last_message_utc else None,
+            },
+            "camera": {
+                "mode": mode, "running": self.capture.running, "viewer_active": viewing,
+                "last_frame_utc": to_iso(last) if last else None, "last_error": self.capture.last_error,
+            },
+            "incidents": {"open": self.manager.open_count},
+        }
+
+    async def _serve_api(self, stop: asyncio.Event) -> None:
+        a = self.cfg.api
+        server = _Server(uvicorn.Config(self.api, host=a.bind, port=a.port, log_level="warning"))
+        task = asyncio.create_task(server.serve())
+        log.info("API and dashboard on http://%s:%s/", a.bind, a.port)
+        try:
+            await stop.wait()
+        finally:
+            server.should_exit = True
+            try:
+                await task
+            except (SystemExit, Exception):  # noqa: BLE001
+                pass
 
     # ---- run ----
 
@@ -87,6 +149,8 @@ class App:
             asyncio.create_task(self.client.run(stop), name="printer"),
             asyncio.create_task(self._tick_loop(stop), name="ticks"),
         ]
+        if self.cfg.api.enabled:
+            tasks.append(asyncio.create_task(self._serve_api(stop), name="api"))
         try:
             await stop.wait()
         finally:

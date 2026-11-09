@@ -18,6 +18,7 @@ What exists so far (Milestone 0, no printer needed):
 - `tools/simulate_trigger.py` to fire fake triggers and check the clips
 - Read-only Moonraker WebSocket client, event detectors, and `tools/ws_recorder.py`
 - `python -m guardian.main` runs it all (see config.example.yaml)
+- HTTP API and a browser dashboard (incident list, incident page with video, trigger marker and timeline)
 - Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app or the printer screen has the camera on (about 1 frame per second)
 
 Everything about the real U1 (camera format, Moonraker objects, detection alerts) is **unverified**.
@@ -29,6 +30,15 @@ Everything about the real U1 (camera format, Moonraker objects, detection alerts
 | Windows 11 | capture, incidents and tests run here |
 | Raspberry Pi 3B+ | not yet |
 | Linux, macOS | not yet |
+
+## Run it
+
+```
+copy config.example.yaml config.yaml
+python -m guardian.main --config config.yaml
+```
+
+Then open http://127.0.0.1:8080/ in a browser. The API only listens on this computer unless you change `api.bind`. If you do, set a token (`api.token` or the `GUARDIAN_API_TOKEN` environment variable). Recordings can show the inside of your home or workshop, so treat them as private.
 
 ## Requirements
 

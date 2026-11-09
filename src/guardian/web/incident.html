@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incident - U1 Guardian</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">U1 Guardian</a> / incident</h1>
+  <span id="uid" class="muted"></span>
+</header>
+<main>
+  <div id="error" class="notice bad" hidden></div>
+  <div id="head" class="row"></div>
+  <div id="recnote"></div>
+
+  <section>
+    <h2>Video</h2>
+    <div id="player"></div>
+  </section>
+
+  <div class="grid" style="margin-top:18px">
+    <section class="card"><h2>Timeline</h2><ul class="timeline" id="timeline"></ul></section>
+    <section class="card"><h2>Details</h2><dl class="kv" id="details"></dl></section>
+  </div>
+
+  <section>
+    <h2>Findings</h2>
+    <div id="findings" class="card"></div>
+  </section>
+
+  <section>
+    <h2>Your notes and actions</h2>
+    <div class="card">
+      <textarea id="note" rows="3" maxlength="2000" style="width:100%" placeholder="Add a note about this incident"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="save">Save note</button>
+        <label><input type="checkbox" id="protect"> Protect (never delete automatically)</label>
+        <a id="export" href="#"><button type="button">Export ZIP</button></a>
+        <button id="delete" class="danger">Delete</button>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/incident.js"></script>
+</body>
+</html>

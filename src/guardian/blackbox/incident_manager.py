@@ -32,6 +32,7 @@ from guardian.camera.segment_buffer import Segment, SegmentBuffer
 from guardian.clock import Clock, from_iso, to_iso
 from guardian.config import Config
 from guardian.storage.db import Database
+from guardian.storage.paths import incident_dir
 
 log = logging.getLogger(__name__)
 
@@ -91,10 +92,7 @@ class IncidentManager:
     # ---- paths ----
 
     def incident_dir(self, incident_id: int, first_trigger: datetime) -> Path:
-        return (
-            self.cfg.storage.incidents_dir
-            / f"{first_trigger:%Y}" / f"{first_trigger:%m}" / f"incident_{incident_id:04d}"
-        )
+        return incident_dir(self.cfg.storage, incident_id, first_trigger)
 
     @property
     def open_count(self) -> int:
@@ -248,7 +246,11 @@ class IncidentManager:
 
         if not segs:
             status = "missing"
-            notes.append("No video segments were available for this window (camera down or buffer empty).")
+            if self.cfg.camera.snapshot_url:
+                notes.append("No video frames were available for this window. The U1 camera only gives "
+                             "pictures while the Snapmaker app or the printer screen is showing the camera.")
+            else:
+                notes.append("No video segments were available for this window (camera down or buffer empty).")
         else:
             notes += self._coverage_notes(inc, segs)
             if inc.pin_failed:
