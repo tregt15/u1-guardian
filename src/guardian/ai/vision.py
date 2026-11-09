@@ -1,7 +1,9 @@
 """AI picture checks during prints, using a local vision model through Ollama.
 
-- Bed check: in the first BED_WINDOW_S of a new print, before anything is printed. Two pictures
-  5 s apart must both say "not clear" before Guardian reports `ai_bed_not_clear`.
+- Bed check: when the printer starts its own bed check step (action code 136, PRINT_BED_DETECTING,
+  seen on a real U1 about 30 s into a print). That is when the bed is in view. If that step does not
+  come within BED_FALLBACK_S, the check runs then. Two pictures 5 s apart must both say "not clear".
+  If the model says it cannot see the plate, there is no verdict.
 - Print check: every `print_check_every_s` once the print has run PRINT_CHECK_AFTER_S. A positive
   answer is checked again with a new picture 10 s later before `ai_print_failure` is reported.
 
@@ -23,33 +25,35 @@ from guardian.config import AiConfig
 
 log = logging.getLogger(__name__)
 
-BED_WINDOW_S = 90.0
+BED_ACTION_CODE = 136  # PRINT_BED_DETECTING, verified name on the real U1
+BED_FALLBACK_S = 120.0
+BED_WINDOW_S = 240.0
 PRINT_CHECK_AFTER_S = 300.0
 CONFIRM_BED_S = 5.0
 CONFIRM_PRINT_S = 10.0
 AVAILABILITY_EVERY_S = 60.0
 
-SYSTEM = ("You check pictures from the camera inside a Snapmaker U1 3D printer. "
-          "Be careful and only report a problem you can clearly see. Answer only with JSON.")
-
-BED_PROMPT = (
-    "This picture was taken at the start of a print, before anything was printed. "
-    "Is the build plate (the flat print surface) clear? It is NOT clear if something lies on it: a leftover print, "
-    "loose parts, tools, a scraper, pieces of filament, purge blobs or any other object. "
-    "Do not count the printer's own parts (frame, toolhead, nozzles, cables, plate edges) or marks, scratches, "
-    "reflections and the plate texture. "
-    'Answer as JSON: {"clear": true or false, "confidence": a number from 0 to 1, '
-    '"objects": [short names of things on the plate], "reason": "one short sentence"}'
-)
-
-PRINT_PROMPT = (
-    "This picture was taken during a 3D print. Is the print failing? Failures are: spaghetti (loose tangled "
-    "strands of plastic), a part that broke loose or fell over, a big blob of plastic stuck on the nozzle, or "
-    "plastic being laid down in the air. A normal print in progress, supports, a purge tower and the printer's own "
-    "parts are fine. "
-    'Answer as JSON: {"failure": true or false, "kind": "spaghetti, detached, blob, air, other or none", '
-    '"confidence": a number from 0 to 1, "reason": "one short sentence"}'
-)
+# Prompts tested on real U1 pictures (2026-11-09). The first version called two normal prints "spaghetti, 0.9".
+# This version answered correctly on those and on an idle picture. Asking for a description first helped.
+SYSTEM = ("You look at pictures from the camera inside a Snapmaker U1 3D printer. The camera looks across the build plate "
+          "toward the back wall. On the right are four toolhead docks and a white purge bin. Most pictures show nothing wrong. "
+          "Only report a problem you can clearly see. Answer only with JSON.")
+PRINT_PROMPT = ("First describe in one plain sentence what is on the build plate. Then decide if the print is failing.\n"
+         "A print is FAILING only if you clearly see on the build plate: a big messy nest of loose plastic strands where a solid part "
+         "should be, a printed part that is knocked over or lying loose, or a big lump of plastic stuck around the nozzle.\n"
+         "These are NORMAL and NOT failures: a solid printed part of any shape, a purge tower or block, thin single wisps or hairs of "
+         "plastic, strands hanging from the toolheads or docks, the purge bin, an empty plate. If you cannot see the build plate, "
+         "or you are not sure, it is not a failure.\n"
+         'JSON: {"description": "one sentence", "plate_visible": true or false, "failure": true or false, '
+         '"kind": "nest, knocked_over, nozzle_blob or none", "confidence": a number from 0 to 1}')
+BED_PROMPT = ("This picture was taken at the start of a print. First describe in one plain sentence what is on the build plate. "
+       "Then decide if the plate is clear for printing.\n"
+       "It is NOT clear only if an object you can clearly see lies on the plate: an old print, a part, a tool, a scraper, or a "
+       "clump of plastic bigger than a coin.\n"
+       "It IS clear if the plate is empty or only has tiny specks, thin wisps, scratches, marks, reflections or texture. "
+       "The printer's own parts, the docks and the purge bin do not count. If you cannot see the build plate, say so.\n"
+       'JSON: {"description": "one sentence", "plate_visible": true or false, "clear": true or false, '
+       '"objects": ["things on the plate"], "confidence": a number from 0 to 1}')
 
 
 def _conf(v: Any) -> float:
@@ -116,7 +120,8 @@ ReportFn = Callable[..., Awaitable[Any]]
 class VisionWatcher:
     def __init__(self, ai: AiService, clock: Clock, *, print_state: Callable[[], str | None],
                  get_frame: Callable[[], Awaitable[bytes | None]], report: ReportFn,
-                 save_evidence: Callable[[Any, list[bytes]], Any] | None = None) -> None:
+                 save_evidence: Callable[[Any, list[bytes]], Any] | None = None,
+                 action_code: Callable[[], Any] = lambda: None) -> None:
         self.ai = ai
         self.cfg = ai.cfg
         self.clock = clock
@@ -124,6 +129,8 @@ class VisionWatcher:
         self._get_frame = get_frame
         self._report = report
         self._save_evidence = save_evidence
+        self._action_code = action_code
+        self._warm_task: asyncio.Task | None = None
         self._prev_state: str | None = None
         self._seen_state = False
         self._print_start: float | None = None
@@ -139,6 +146,8 @@ class VisionWatcher:
         state = self._print_state()
         if self._seen_state and state == "printing" and self._prev_state not in ("printing", "paused"):
             self._print_start, self._bed_done, self._last_print_check = self.clock.monotonic(), False, None
+            if self.cfg.enabled:  # load the model now, so the bed check does not wait a minute for it
+                self._warm_task = asyncio.create_task(self._warm())
         if state not in ("printing", "paused"):
             self._print_start = None
         if state is not None:
@@ -155,8 +164,8 @@ class VisionWatcher:
         if self.cfg.bed_check and not self._bed_done and since_start is not None:
             if since_start > BED_WINDOW_S:
                 self._bed_done = True
-                self._remember("bed", None, "skipped: no camera picture in the first 90 s of the print")
-            else:
+                self._remember("bed", None, "skipped: no camera picture during the printer's bed check")
+            elif self._action_code() == BED_ACTION_CODE or since_start >= BED_FALLBACK_S:
                 self._task = asyncio.create_task(self._bed_check())
                 return
         if self.cfg.print_check and (since_start is None or since_start >= PRINT_CHECK_AFTER_S):
@@ -189,6 +198,9 @@ class VisionWatcher:
         a = await self._ask("bed", first)
         if a is None:
             return
+        if _bool(a.get("plate_visible")) is False:
+            self._remember("bed", a, "build plate not visible, no verdict")
+            return
         bad = _bool(a.get("clear")) is False and _conf(a.get("confidence")) >= self.cfg.min_confidence
         self._remember("bed", a, "not clear, checking again" if bad else "clear")
         if not bad:
@@ -198,13 +210,14 @@ class VisionWatcher:
         b = await self._ask("bed", second) if second else None
         if b is None:
             return
-        confirmed = _bool(b.get("clear")) is False and _conf(b.get("confidence")) >= self.cfg.min_confidence
+        confirmed = (_bool(b.get("plate_visible")) is not False and _bool(b.get("clear")) is False
+                     and _conf(b.get("confidence")) >= self.cfg.min_confidence)
         self._remember("bed", b, "not clear (confirmed)" if confirmed else "clear on the second look, no alert")
         if confirmed:
             objects = b.get("objects") or a.get("objects") or []
             what = ", ".join(str(o) for o in objects[:5]) if isinstance(objects, list) else str(objects)
             await self._fire("ai_bed_not_clear", f"The AI sees something on the build plate"
-                             + (f" ({what})" if what else "") + f": {b.get('reason') or a.get('reason')}",
+                             + (f" ({what})" if what else "") + f": {b.get('description') or a.get('description')}",
                              [first, second], a, b)
 
     async def _print_check(self) -> None:
@@ -215,7 +228,8 @@ class VisionWatcher:
         a = await self._ask("print", first)
         if a is None:
             return
-        bad = _bool(a.get("failure")) is True and _conf(a.get("confidence")) >= self.cfg.min_confidence
+        bad = (_bool(a.get("plate_visible")) is not False and _bool(a.get("failure")) is True
+               and _conf(a.get("confidence")) >= self.cfg.min_confidence)
         self._remember("print", a, "failure seen, checking again" if bad else "looks fine")
         if not bad:
             return
@@ -226,11 +240,20 @@ class VisionWatcher:
         b = await self._ask("print", second) if second else None
         if b is None:
             return
-        confirmed = _bool(b.get("failure")) is True and _conf(b.get("confidence")) >= self.cfg.min_confidence
+        confirmed = (_bool(b.get("plate_visible")) is not False and _bool(b.get("failure")) is True
+                     and _conf(b.get("confidence")) >= self.cfg.min_confidence)
         self._remember("print", b, "failure (confirmed)" if confirmed else "fine on the second look, no alert")
         if confirmed:
             await self._fire("ai_print_failure", f"The AI sees a print failure ({b.get('kind') or a.get('kind')}): "
-                             f"{b.get('reason') or a.get('reason')}", [first, second], a, b)
+                             f"{b.get('description') or a.get('description')}", [first, second], a, b)
+
+    async def _warm(self) -> None:
+        try:
+            await self.ai.refresh()
+            if self.ai.usable:
+                await self.ai.ollama.warm(self.cfg.model)
+        except Exception:  # noqa: BLE001 - only a speed-up
+            log.info("could not load the AI model ahead of time", exc_info=True)
 
     async def _fire(self, event_type: str, summary: str, frames: list[bytes], a: dict, b: dict) -> None:
         meta = {"summary": summary, "model": self.cfg.model, "first_answer": a, "second_answer": b,

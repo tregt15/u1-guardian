@@ -92,7 +92,8 @@ document.getElementById("save").addEventListener("click", async (ev) => {
     saved = r.values; render(true);
     say(r.changed.length ? "Saved: " + r.changed.join(", ") : "Nothing changed.", "info");
     loadAi();
-    if (r.changed.includes("ai.enabled") && r.values["ai.enabled"] === true) afterAiTurnedOn();
+    // Every save with local AI on: if Ollama or the model is missing, offer to get it (it only asks then).
+    if (r.values["ai.enabled"] === true) afterAiTurnedOn();
   } catch (e) { say("Not saved: " + e.message, "bad"); dirty(); }
 });
 document.getElementById("reset").addEventListener("click", () => { render(true); say("", ""); });
@@ -167,6 +168,7 @@ async function installOllama(fromToggle) {
 async function afterAiTurnedOn() {
   let r;
   try { r = await api("/api/ai/status"); } catch (e) { return; }
+  if ((r.download || {}).running || (((r.install || {}).state) || {}).running) return;  // already on its way
   if (r.ollama_found) {
     if (!r.model_ready) download(r.model, r.models[r.model] || r.model);
     return;

@@ -17,6 +17,10 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+# Keep the model loaded this long after the last request. Checks run every minute during a print, so it
+# stays loaded while printing and frees the graphics card memory 15 minutes after.
+KEEP_ALIVE = "15m"
+
 
 class OllamaError(Exception):
     pass
@@ -109,6 +113,11 @@ class Ollama:
             if r.status_code not in (200, 404):
                 raise OllamaError(f"HTTP {r.status_code}")
 
+    async def warm(self, model: str) -> None:
+        """Load the model into memory now (the first answer otherwise took 73 s on an RTX 3070 Ti)."""
+        async with self._client(300.0) as c:
+            await c.post("/api/generate", json={"model": model, "keep_alive": KEEP_ALIVE})
+
     async def chat_json(self, model: str, prompt: str, images: list[bytes] | None = None, *,
                         system: str | None = None, timeout: float = 180.0, num_ctx: int = 8192) -> dict:
         """Ask the model and get a JSON object back. Raises OllamaError."""
@@ -120,7 +129,7 @@ class Ollama:
             user["images"] = [base64.b64encode(b).decode("ascii") for b in images]
         messages.append(user)
         body = {"model": model, "messages": messages, "stream": False, "format": "json",
-                "options": {"temperature": 0, "num_ctx": num_ctx}}
+                "keep_alive": KEEP_ALIVE, "options": {"temperature": 0, "num_ctx": num_ctx}}
         try:
             async with self._client(timeout) as c:
                 r = await c.post("/api/chat", json=body)

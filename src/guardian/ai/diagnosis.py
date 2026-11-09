@@ -39,6 +39,9 @@ STOP_EVENTS = {
 PROMPT = """You help the owner of a Snapmaker U1 3D printer understand why a print stopped or had a problem.
 The U1 has 4 toolheads that it swaps during a print, a filament feeder for each one, and runs Klipper.
 Use ONLY the evidence below. If the evidence does not show the cause, say that plainly. Do not invent details.
+The print may not have failed at all. If nothing in the evidence shows a printer problem, say no problem was found.
+Lines marked as about Guardian's own video are never the cause of a print problem.
+Printer log lines starting with "!!" and lines with "error" or "exception" are the most important evidence.
 Write short, plain sentences for someone who is not an expert.
 
 {evidence}
@@ -50,6 +53,34 @@ Answer as JSON:
   "evidence": ["short points, each based on a line of the evidence above"],
   "what_to_check": ["short steps the owner can take, most useful first"],
   "safe_to_resume": "yes, no or unknown"}}"""
+
+
+# What some U1 messages mean, from Guardian's own investigation (docs/u1-discovery-notes.md). Given to the model
+# as notes when the evidence contains the pattern, because a small model cannot know these.
+KNOWN_MEANINGS = [
+    (re.compile(r"wheel_speed", re.I),
+     "Seen on a real U1: 'wheel_speed' during 'load_feeding' means the filament feeder's measuring wheel stopped "
+     "turning while the feed motor kept running. So the filament was not moving into the toolhead. Usual causes: the "
+     "spool is tangled or stuck, the filament ran out or broke, it is not pushed in far enough, or it slips in the "
+     "feeder. It is not a settings problem."),
+    (re.compile(r"nozzle diameter mismatch", re.I),
+     "Seen on a real U1: the sliced file's nozzle size does not match the installed nozzle. Re-slice with the right "
+     "nozzle size, or set the nozzle size in the slicer printer profile."),
+    (re.compile(r"\"id\": 532|id:532|detected (dirty bed|noodle|residue|dirty nozzle)|bed_not_clear|spaghetti_detected", re.I),
+     "Exception 532 comes from the printer's own camera check: code 1 dirty bed, 2 spaghetti, 3 residue, 4 dirty "
+     "nozzle. It pauses the print by itself."),
+    (re.compile(r"toolchange_(timeout|wrong_tool|bad_state|error)"),
+     "Guardian watches each tool change (park the old tool, pick the new one). A stuck or wrong change usually means "
+     "the tool did not lock in its dock or on the carriage: check the dock and the toolhead for plastic, strings or "
+     "damage."),
+    (re.compile(r"heater_(not_reaching|temperature_drop)"),
+     "Guardian saw a heater that could not reach or hold its temperature. Check the heater and its temperature "
+     "sensor cable, and whether a fan blows straight on the nozzle."),
+]
+
+
+def known_notes(text: str) -> list[str]:
+    return [note for pattern, note in KNOWN_MEANINGS if pattern.search(text)]
 
 
 def wanted(mode: str, row: Any, event_types: set[str]) -> bool:
@@ -79,7 +110,8 @@ def build_evidence(db: Database, row: Any, folder: Path) -> str:
         f"first trigger: {row['first_trigger_utc']}  print file: {row['print_filename'] or 'unknown'}",
         f"progress: {row['print_progress'] if row['print_progress'] is not None else 'unknown'}%  "
         f"active tool: {row['active_toolhead'] or 'unknown'}",
-        f"recording: {row['recording_status']} {row['recording_notes'] or ''}".strip(),
+        f"(about Guardian's own video only, says nothing about the print) recording: {row['recording_status']} "
+        f"{row['recording_notes'] or ''}".strip(),
         "",
         "TIMELINE (UTC)",
     ]
@@ -104,7 +136,27 @@ def build_evidence(db: Database, row: Any, folder: Path) -> str:
         parts += ["", "PRINTER LOGS", _trim_logs(logs.read_text(encoding="utf-8", errors="replace"))]
     else:
         parts += ["", "PRINTER LOGS: not available"]
-    return "\n".join(parts)
+    text = "\n".join(parts)
+    notes = known_notes(text)
+    if notes:
+        text += ("\n\nGUARDIAN NOTES (what these messages mean, from earlier tests on a real U1)\n"
+                 + "\n".join(f"- {n}" for n in notes))
+    return text
+
+
+def tidy(answer: dict) -> dict:
+    """Remove repeated list items (the model sometimes repeats one point)."""
+    for key in ("evidence", "what_to_check"):
+        items = answer.get(key)
+        if isinstance(items, list):
+            seen, out = set(), []
+            for x in items:
+                k = str(x).strip().lower()
+                if k and k not in seen:
+                    seen.add(k)
+                    out.append(x)
+            answer[key] = out
+    return answer
 
 
 def extract_frames(ffmpeg: str, clip: Path, times_s: list[float]) -> list[bytes]:
@@ -181,7 +233,7 @@ class Diagnoser:
         else:
             evidence += "\n\nPICTURES: none (no footage)."
         try:
-            answer = await self.ai.ask(PROMPT.format(evidence=evidence), frames, num_ctx=12288)
+            answer = tidy(await self.ai.ask(PROMPT.format(evidence=evidence), frames, num_ctx=12288))
         except OllamaError as exc:
             self.last_error = str(exc)
             self._save(folder, {"available": False, "note": f"The AI could not answer: {exc}"})

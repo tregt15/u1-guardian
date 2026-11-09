@@ -110,7 +110,8 @@ class App:
         self.ai = AiService(cfg.ai, self.clock)
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
-                                    save_evidence=self._save_ai_pictures)
+                                    save_evidence=self._save_ai_pictures,
+                                    action_code=lambda: self.tracker.status.get("machine_state_manager", {}).get("action_code"))
         self.health = HealthWatch(self.clock, lambda: self.tracker.status, self._report)
         self.selftest_result: dict | None = None
         self.firmware_changed: tuple[str, str] | None = None  # (old, new)

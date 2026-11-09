@@ -43,6 +43,9 @@ class FakeOllama:
             return httpx.Response(200, content="\n".join(json.dumps(x) for x in lines).encode())
         if path == "/api/delete":
             return httpx.Response(200)
+        if path == "/api/generate":
+            self.warmed = getattr(self, "warmed", 0) + 1
+            return httpx.Response(200, json={"done": True})
         if path == "/api/chat":
             body = json.loads(request.content)
             self.chats.append(body)
@@ -92,11 +95,13 @@ class Rig:
         self.fake = FakeOllama(answers)
         self.ai = service(self.fake, self.clock, **cfg)
         self.state = "standby"
+        self.action = 136  # the printer's own bed check step
         self.frame = frame
         self.reports = []
         self.saved = []
         self.w = VisionWatcher(self.ai, self.clock, print_state=lambda: self.state, get_frame=self._frame,
-                               report=self._report, save_evidence=lambda r, f: self.saved.append(f))
+                               report=self._report, save_evidence=lambda r, f: self.saved.append(f),
+                               action_code=lambda: self.action)
 
     async def _frame(self):
         return self.frame
@@ -150,7 +155,7 @@ async def test_no_bed_check_when_guardian_starts_mid_print(monkeypatch):
     await rig.run(60)
     # No bed check (the print started before Guardian), but failure checks start at once.
     assert rig.reports == [] and rig.fake.chats
-    assert all("during a 3D print" in c["messages"][-1]["content"] for c in rig.fake.chats)
+    assert all("print is failing" in c["messages"][-1]["content"] for c in rig.fake.chats)
 
 
 async def test_print_failure_checked_twice_then_reported(monkeypatch):
@@ -170,7 +175,7 @@ async def test_no_fresh_picture_means_no_check(monkeypatch):
     rig = Rig([], monkeypatch, frame=None)
     await rig.run(1)
     rig.state = "printing"
-    await rig.run(100)
+    await rig.run(250)
     assert rig.fake.chats == []
     assert "skipped" in rig.w.status()["recent"][0]["verdict"]
 
@@ -254,3 +259,43 @@ def test_which_incidents_get_a_diagnosis():
     assert wanted("stops", {"severity": "critical"}, {"toolchange_wrong_tool"})
     assert wanted("all", row, {"toolchange_bad_state"})
     assert not wanted("off", {"severity": "critical"}, {"print_error"})
+
+
+
+async def test_bed_check_waits_for_the_printers_bed_step_or_the_fallback(monkeypatch):
+    bad = {"plate_visible": True, "clear": False, "confidence": 0.9}
+    rig = Rig([bad, bad], monkeypatch)
+    rig.action = 0
+    await rig.run(1)
+    rig.state = "printing"
+    await rig.run(30)
+    assert rig.fake.chats == [] and getattr(rig.fake, "warmed", 0) == 1  # model loaded early, no check yet
+    rig.action = 136
+    await rig.run(3)
+    assert [r[0] for r in rig.reports] == ["ai_bed_not_clear"]
+    late = Rig([{"plate_visible": True, "clear": True, "confidence": 0.9}], monkeypatch)
+    late.action = 0
+    await late.run(1)
+    late.state = "printing"
+    await late.run(119)
+    assert late.fake.chats == []
+    await late.run(3)
+    assert len(late.fake.chats) == 1  # fallback after 120 s
+
+
+async def test_plate_not_visible_is_no_verdict(monkeypatch):
+    rig = Rig([{"plate_visible": False, "clear": False, "confidence": 1.0},
+               {"plate_visible": False, "failure": True, "confidence": 1.0}], monkeypatch)
+    await rig.run(1)
+    rig.state = "printing"
+    await rig.run(5)
+    assert rig.reports == [] and "not visible" in rig.w.status()["recent"][0]["verdict"]
+
+
+def test_known_meanings_and_tidy():
+    from guardian.ai.diagnosis import known_notes, tidy
+    notes = known_notes("!! extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!")
+    assert len(notes) == 1 and "not moving" in notes[0]
+    assert known_notes("everything fine") == []
+    a = tidy({"evidence": ["x", "X ", "y"], "what_to_check": ["a", "a"]})
+    assert a["evidence"] == ["x", "y"] and a["what_to_check"] == ["a"]
