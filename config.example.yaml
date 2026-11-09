@@ -38,6 +38,15 @@ toolchanger:
   learn_count: 20             # good changes to measure before learning
   settle_s: 3                 # after a change ends, time allowed for the tool states to settle
 
+autopause:
+  # Pause the print when Guardian finds a problem and the printer did not pause by itself.
+  enabled: true
+  grace_s: 10                 # time the printer gets to pause by itself first
+  # triggers: [bed_not_clear, spaghetti_detected, residue_detected, dirty_nozzle_detected,
+  #            toolchange_wrong_tool, toolchange_error, toolchange_timeout, filament_feed_error]
+
+# The Settings page saves changes to settings.yaml in the data folder. Those win over this file.
+
 storage:
   # Leave data_dir and buffer_dir out to use the normal folder for your OS.
   # data_dir: ./data

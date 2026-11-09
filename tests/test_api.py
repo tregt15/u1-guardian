@@ -244,3 +244,27 @@ def test_dashboard_never_uses_innerhtml():
     from guardian.api.app import WEB_DIR
     for f in WEB_DIR.glob("*.js"):
         assert "innerHTML" not in f.read_text(encoding="utf-8"), f.name
+
+
+def test_settings_get_and_put(tmp_path):
+    from guardian import settings as settings_mod
+    env = make_env(tmp_path)
+    assert env.client.get("/api/settings").json()["writable"] is False
+    assert env.client.put("/api/settings", json={"changes": {}}).status_code == 409
+    env.ctx.settings_fn = lambda changes: settings_mod.save(env.cfg, changes)
+    env.client = TestClient(create_app(env.ctx))
+    body = env.client.get("/api/settings").json()
+    assert body["writable"] and body["values"]["camera.keepalive"] == "printing"
+    assert any(f["key"] == "autopause.triggers" for f in body["fields"])
+    r = env.client.put("/api/settings", json={"changes": {"camera.keepalive": "off"}})
+    assert r.status_code == 200 and r.json()["changed"] == ["camera.keepalive"]
+    assert env.cfg.camera.keepalive == "off"
+    bad = env.client.put("/api/settings", json={"changes": {"printer.host": "x"}})
+    assert bad.status_code == 400
+    assert env.client.get("/settings").status_code == 200
+
+
+def test_settings_need_token_when_set(tmp_path):
+    env = make_env(tmp_path, token="s3cret")
+    assert env.client.get("/api/settings").status_code == 401
+    assert env.client.put("/api/settings", json={"changes": {}}).status_code == 401

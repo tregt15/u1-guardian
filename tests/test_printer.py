@@ -208,3 +208,30 @@ async def test_snapmaker_ai_exception_532_is_named():
         {"id": 532, "index": 0, "code": 2, "level": 2, "message": "detected noodle"}]})
     assert reports == [("bed_not_clear", "snapmaker_ai", "critical"),
                        ("spaghetti_detected", "snapmaker_ai", "critical")]
+
+
+async def test_pause_only_when_allowed_and_without_params():
+    mock = MockMoonraker([[]])
+    await mock.start()
+    client = MoonrakerClient("127.0.0.1", mock.port, EventBus(), backoff_start_s=0.05, backoff_cap_s=0.2)
+    with pytest.raises(RuntimeError):
+        await client._send(None, 99, "printer.print.pause")
+    client.allow_pause = True
+    for method, params in [("printer.print.pause", {"x": 1}), ("printer.print.resume", None),
+                           ("printer.print.cancel", None)]:
+        with pytest.raises(RuntimeError):
+            await client._send(None, 99, method, params)
+    stop = asyncio.Event()
+    task = asyncio.create_task(client.run(stop))
+    try:
+        async with asyncio.timeout(5):
+            while not client.connected:
+                await asyncio.sleep(0.02)
+            assert await client.pause_print() is True
+            while not mock.pauses:
+                await asyncio.sleep(0.02)
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+    assert mock.pauses == [None] and mock.refused == []

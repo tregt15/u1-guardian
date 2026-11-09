@@ -25,14 +25,14 @@ log = logging.getLogger(__name__)
 # async (event_type, source, severity, dedup_key, metadata) -> anything
 
 # The printer's own camera AI (Snapmaker `defect_detection.py` on the U1, read over SSH 2026-11-09).
-# On a find it raises exception id 532 with these codes and then pauses the print itself.
+# On a find it raises exception id 532 with these codes and then normally pauses the print itself.
 # Read from the printer's source code. Not yet seen happen on a real print, so UNVERIFIED live.
 AI_EXCEPTION_ID = 532
 AI_DETECTIONS = {
-    1: ("bed_not_clear", "The printer's camera check found something on the build plate and paused the print."),
-    2: ("spaghetti_detected", "The printer's camera check saw spaghetti (noodle) and paused the print."),
-    3: ("residue_detected", "The printer's camera check saw residue and paused the print."),
-    4: ("dirty_nozzle_detected", "The printer's camera check saw a dirty nozzle and paused the print."),
+    1: ("bed_not_clear", "The printer's camera check found something on the build plate."),
+    2: ("spaghetti_detected", "The printer's camera check saw spaghetti (noodle)."),
+    3: ("residue_detected", "The printer's camera check saw residue."),
+    4: ("dirty_nozzle_detected", "The printer's camera check saw a dirty nozzle."),
 }
 ReportFn = Callable[..., Awaitable[Any]]
 

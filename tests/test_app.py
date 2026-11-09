@@ -89,3 +89,37 @@ async def test_app_keeps_running_when_the_dashboard_port_is_busy(tmp_path):
         await task
         await mock.stop()
         blocker.close()
+
+
+async def test_guardian_pauses_when_the_printer_does_not(tmp_path):
+    """The printer reports a dirty bed (exception 532 code 1) but, in this made-up case, does not pause.
+    Guardian must pause it after the grace time, once, and write it in the incident."""
+    from guardian.config import AutopauseConfig
+
+    cfg = sim.make_config(tmp_path, pre_s=6, post_s=4)
+    cfg = cfg.model_copy(update={"autopause": AutopauseConfig(grace_s=1.0)})
+    dirty = {"jsonrpc": "2.0", "method": "notify_exception_notification",
+             "params": [{"id": 532, "index": 0, "code": 1, "level": 2, "message": "detected dirty bed"}]}
+    printing = {"print_stats": {"state": "printing", "filename": "demo.gcode", "exception": {},
+                                "info": {"total_layer": 200, "current_layer": 1}}}
+    mock = MockMoonraker([[dirty]], snapshots=[printing], delay_s=2.0)
+    await mock.start()
+    app = App(cfg, printer_port=mock.port)
+    stop = asyncio.Event()
+    task = asyncio.create_task(app.run(stop))
+    try:
+        async with asyncio.timeout(30):
+            while not mock.pauses:
+                await asyncio.sleep(0.2)
+        await asyncio.sleep(1.5)  # time for a second (wrong) pause, if there were one
+        row = app.db.list_incidents()[0]
+        kinds = [e["event_type"] for e in app.db.list_events(row["id"])]
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+    assert mock.pauses == [None]
+    assert mock.refused == []
+    assert row["event_type"] == "bed_not_clear" and row["severity"] == "critical"
+    assert "autopause_armed" in kinds and "guardian_paused_print" in kinds
+    assert app.autopause.status()["paused_count"] == 1

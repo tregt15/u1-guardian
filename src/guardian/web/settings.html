@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings - U1 Guardian</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">U1 Guardian</a> / settings</h1>
+  <span id="where" class="muted"></span>
+</header>
+<main>
+  <div id="msg"></div>
+  <form id="form" class="grid"></form>
+  <p class="row">
+    <button id="save" class="primary" type="button" disabled>Save</button>
+    <button id="reset" type="button" disabled>Undo changes</button>
+  </p>
+  <p class="muted">Changes apply right away. No restart needed. Printer address, camera address and API keys
+    stay in config.yaml and environment variables.</p>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/settings.js"></script>
+</body>
+</html>

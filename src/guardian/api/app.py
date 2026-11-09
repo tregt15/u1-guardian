@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask
 
 from guardian import __version__, hostinfo
+from guardian import settings as settings_mod
 from guardian.bus import EventBus
 from guardian.clock import from_iso, to_iso
 from guardian.config import Config
@@ -52,6 +53,7 @@ class ApiContext:
     trigger_fn: Callable[..., Awaitable[Any]]  # (event_type, source, severity, key, metadata)
     started_utc: datetime
     notifier: Any = None  # NotificationManager or None
+    settings_fn: Callable[[dict], list[str]] | None = None  # check, save and apply settings
     extra: dict = field(default_factory=dict)
 
 
@@ -64,6 +66,11 @@ class PatchBody(BaseModel):
 class TestBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     channel: Literal["email"] = "email"
+
+
+class SettingsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    changes: dict[str, Any]
 
 
 class ManualBody(BaseModel):
@@ -283,6 +290,22 @@ def create_app(ctx: ApiContext) -> FastAPI:
             out.append(item)
         return {"toolchanges": out, "counts": db.toolchange_stats()}
 
+    @app.get("/api/settings", dependencies=[Depends(auth)])
+    async def get_settings() -> dict:
+        return {"fields": settings_mod.FIELDS, "values": settings_mod.current(cfg),
+                "writable": ctx.settings_fn is not None,
+                "file": str(settings_mod.settings_path(cfg))}
+
+    @app.put("/api/settings", dependencies=[Depends(auth)])
+    async def put_settings(body: SettingsBody) -> dict:
+        if ctx.settings_fn is None:
+            raise HTTPException(409, "settings cannot be changed in this mode")
+        try:
+            changed = ctx.settings_fn(body.changes)
+        except settings_mod.SettingsError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"changed": changed, "values": settings_mod.current(cfg)}
+
     @app.post("/api/notifications/test", dependencies=[Depends(auth)])
     async def notifications_test(body: TestBody) -> dict:
         if ctx.notifier is None:
@@ -331,6 +354,10 @@ def create_app(ctx: ApiContext) -> FastAPI:
         @app.get("/", include_in_schema=False)
         async def index():
             return FileResponse(WEB_DIR / "index.html")
+
+        @app.get("/settings", include_in_schema=False)
+        async def settings_page() -> FileResponse:
+            return FileResponse(WEB_DIR / "settings.html")
 
         @app.get("/incident", include_in_schema=False)
         async def incident_page():

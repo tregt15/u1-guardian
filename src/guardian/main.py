@@ -32,10 +32,12 @@ from guardian.config import Config, ConfigError, default_config_path, load_confi
 from guardian.env import load_dotenv
 from guardian.notify.email import ResendEmailChannel
 from guardian.notify.manager import NotificationManager
+from guardian.printer.autopause import AutoPause
 from guardian.printer.detectors import Detector
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
 from guardian.printer.toolchanger import ToolchangeMonitor
+from guardian import settings as settings_mod
 from guardian.storage.db import Database
 
 log = logging.getLogger("guardian")
@@ -77,20 +79,26 @@ class App:
                                              self._report)
         self.camera_session = CameraSessionWatch(
             self.bus, self.clock, note=lambda kind, meta: self.manager.add_note(kind, "printer_camera", meta))
-        keepalive_on = snapshot_mode and cfg.camera.keepalive != "off"
+        self.snapshot_mode = snapshot_mode
         self.client = MoonrakerClient(cfg.printer.host, printer_port or cfg.printer.moonraker_port,
-                                      self.bus, self.clock, allow_camera_start=keepalive_on)
+                                      self.bus, self.clock)
+        self._sync_write_permissions()
         if snapshot_mode:
             self.capture = SnapshotCapture(cfg.camera, self.buffer, self.clock, active=self._buffer_wanted)
         else:
             self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin)
         self.keepalive = CameraKeepalive(
-            cfg.camera.keepalive if keepalive_on else "off", self.camera_session, self.clock,
+            lambda: self.cfg.camera.keepalive if self.snapshot_mode else "off", self.camera_session, self.clock,
             print_state=lambda: self.tracker.print_state,
             last_frame=lambda: self.capture.last_frame_utc,
             frames_watched=lambda: snapshot_mode and self._buffer_wanted(),
             send=self.client.start_camera_monitor,
             audit=lambda msg, meta: self.db.log("camera", "info", msg, meta))
+        self.autopause = AutoPause(
+            cfg.autopause, self.clock, print_state=lambda: self.tracker.print_state,
+            send_pause=self.client.pause_print,
+            note=lambda kind, meta: self.manager.add_note(kind, "guardian", meta),
+            audit=lambda msg, meta: self.db.log("autopause", "warning", msg, meta))
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
@@ -98,7 +106,7 @@ class App:
         self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock)
         self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
                                          trigger_fn=self._report, started_utc=self.started_utc,
-                                         notifier=self.notifier))
+                                         notifier=self.notifier, settings_fn=self.apply_settings))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.disconnected", self._log_event)
@@ -111,7 +119,30 @@ class App:
     async def _report(self, event_type, source, severity, key, metadata):
         # Every trigger, from any source, carries the current printer state (file, progress, tool head).
         meta = {**self.tracker.incident_metadata(), **(metadata or {})}
-        return await self.manager.report_incident(event_type, source, severity, key, meta)
+        result = await self.manager.report_incident(event_type, source, severity, key, meta)
+        try:
+            await self.autopause.on_trigger(event_type, meta.get("summary") or meta.get("message"))
+        except Exception:  # noqa: BLE001 - never lose the incident over this
+            log.exception("auto pause check failed")
+        return result
+
+    def _sync_write_permissions(self) -> None:
+        """The client may only send the two opt-in requests while their settings allow it."""
+        self.client.allow_camera_start = self.snapshot_mode and self.cfg.camera.keepalive != "off"
+        self.client.allow_pause = self.cfg.autopause.enabled
+
+    def apply_settings(self, changes: dict) -> list[str]:
+        """Check, save and apply dashboard settings. Raises settings.SettingsError."""
+        changed = settings_mod.save(self.cfg, changes)
+        self._sync_write_permissions()
+        if any(k.startswith("notifications.email.") for k in changed):
+            email = self.cfg.notifications.email
+            self.notifier.channels = [ResendEmailChannel(email)] if email.enabled else []
+        if changed:
+            log.info("settings changed from the dashboard: %s", changed)
+            self.db.log("settings", "info", "settings changed from the dashboard",
+                        {k: settings_mod.current(self.cfg)[k] for k in changed})
+        return changed
 
     def _buffer_wanted(self) -> bool:
         """buffer_mode: `printing` buffers while a print is heating, running or paused (spec 6.1).
@@ -155,6 +186,7 @@ class App:
             },
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
+            "autopause": self.autopause.status(),
             "notifications": {"email": {
                 "enabled": self.cfg.notifications.email.enabled,
                 # Only whether a key exists. The key itself is never shown.
@@ -227,6 +259,10 @@ class App:
             except Exception:  # noqa: BLE001
                 log.exception("camera keepalive tick failed")
             try:
+                await self.autopause.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("auto pause tick failed")
+            try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:
                 pass
@@ -247,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         env_files.insert(0, args.config.parent / ".env")
     load_dotenv(*env_files)
     try:
-        cfg = load_config(args.config)
+        cfg = settings_mod.load_overrides(load_config(args.config))
         app = App(cfg)
     except (ConfigError, FFmpegMissing) as exc:
         print(f"Error: {exc}", file=sys.stderr)

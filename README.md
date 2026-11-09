@@ -30,9 +30,13 @@ What exists so far (Milestone 0, no printer needed):
 What was seen on a real U1 is in `docs/u1-discovery-notes.md`. Anything not listed there, like Snapmaker's own
 spaghetti and bed alerts, is **unverified**. Guardian does not pretend to detect those.
 
-## The one thing Guardian sends to the printer
+## What Guardian sends to the printer
 
-Guardian only reads from the printer, with one exception you can turn off. To get camera pictures without the
+Guardian only reads from the printer, with two exceptions you can turn off on the Settings page.
+
+### Auto camera
+
+This is the first exception. To get camera pictures without the
 Snapmaker app open, it asks the printer to start its camera for the local network (`camera.start_monitor`, domain
 `lan`). That is the same request the app sends. It does not move, heat or pause anything, and Guardian never turns
 the camera off, so it cannot cut off the app. Each request is logged.
@@ -45,6 +49,24 @@ Set `camera.keepalive` in your config:
 
 The printer's log showed no cloud upload for these local sessions (the app's own sessions do upload). That is
 based on the log only.
+
+### Auto pause
+
+If Guardian finds a problem and the printer did not pause by itself, Guardian pauses the print. It waits 10 s first
+(the printer's own camera check usually pauses by itself). It uses Moonraker's normal pause request, the same as the
+pause button in Fluidd. It never resumes or cancels. You resume from the printer or the app.
+
+Problems that can pause a print (each can be turned off): build plate not clear, spaghetti, residue, dirty nozzle
+(all from the printer's own camera check), a tool change that is stuck, ends on the wrong tool or reports an error,
+and a filament feed error. Guardian has not paused a real print yet.
+
+Guardian has no camera AI of its own. "Build plate not clear" and the other camera checks come from the printer.
+
+## Settings page
+
+Open `/settings` on the dashboard. Changes apply right away and are saved to `settings.yaml` in Guardian's data
+folder. `config.yaml` is never rewritten. Printer address, camera address and API keys stay in `config.yaml` and
+environment variables. If the dashboard is reachable from your network, it needs a token (see `api.token`).
 
 ## Platforms
 

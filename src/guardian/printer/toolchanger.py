@@ -89,9 +89,8 @@ class ToolchangeMonitor:
         self.report = report
         self._open: list[_Change] = []
         self._ok_ms: deque[int] = deque(reversed(db.recent_ok_toolchange_ms(LEARN_KEEP)), maxlen=LEARN_KEEP)
-        if cfg.enabled:
-            bus.subscribe("printer.snapshot", self._on_snapshot)
-            bus.subscribe("printer.message", self._on_message)
+        bus.subscribe("printer.snapshot", self._on_snapshot)
+        bus.subscribe("printer.message", self._on_message)
 
     # ---- public ----
 
@@ -121,6 +120,8 @@ class ToolchangeMonitor:
         }
 
     async def tick(self) -> None:
+        if not self.cfg.enabled:
+            return
         now = self.clock.monotonic()
         for ch in list(self._open):
             if ch.status == "running" and now - ch.start_mono > self.timeout_s():
@@ -142,6 +143,13 @@ class ToolchangeMonitor:
                 self._open.remove(ch)
 
     async def _on_message(self, topic: str, payload: dict) -> None:
+        if not self.cfg.enabled:  # read every time: the setting can change while running
+            if self._open:
+                for ch in list(self._open):
+                    if ch.status in ("running", "settling"):
+                        self._finish(ch, "interrupted", error="Tool change watching was turned off.")
+                self._open.clear()
+            return
         method, params = payload.get("method"), payload.get("params")
         if not isinstance(params, list):
             return

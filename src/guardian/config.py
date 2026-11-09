@@ -199,11 +199,31 @@ class ToolchangerConfig(_Section):
     settle_s: float = Field(default=3.0, gt=0)
 
 
+# Incident types Guardian may pause a print for. Generic `!!` lines and odd tool states are left
+# out on purpose: the printer itself prints "!! Print already paused", and what the tool pin
+# values mean is UNVERIFIED.
+PAUSABLE_EVENTS = (
+    "bed_not_clear", "spaghetti_detected", "residue_detected", "dirty_nozzle_detected",
+    "toolchange_wrong_tool", "toolchange_error", "toolchange_timeout", "filament_feed_error",
+)
+
+
+class AutopauseConfig(_Section):
+    """Pause the print when Guardian finds a problem and the printer did not pause by itself.
+    Sends Moonraker's printer.print.pause (Klipper PAUSE). Owner approved, 2026-11-09."""
+
+    enabled: bool = True
+    # Wait this long for the printer to pause on its own before Guardian does it.
+    grace_s: float = Field(default=10.0, ge=0, le=120)
+    triggers: list[Literal[PAUSABLE_EVENTS]] = list(PAUSABLE_EVENTS)  # type: ignore[valid-type]
+
+
 class Config(_Section):
     printer: PrinterConfig = PrinterConfig()
     camera: CameraConfig = CameraConfig()
     blackbox: BlackboxConfig = BlackboxConfig()
     toolchanger: ToolchangerConfig = ToolchangerConfig()
+    autopause: AutopauseConfig = AutopauseConfig()
     storage: StorageConfig = StorageConfig()
     api: ApiConfig = ApiConfig()
     notifications: NotificationsConfig = NotificationsConfig()

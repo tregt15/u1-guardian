@@ -45,6 +45,8 @@ async function refreshStatus() {
     fill(document.getElementById("guardian"), [
       ["Version", g.version],
       ["Open incidents", String((s.incidents || {}).open ?? 0)],
+      ["Auto pause", el("span", {}, (s.autopause || {}).enabled ? badge("on", "ok") : badge("off", "info"),
+        (s.autopause || {}).last_pause_utc ? el("div", { class: "muted" }, "last paused " + ago(s.autopause.last_pause_utc)) : null)],
       ["Disk free", st.free_gb != null ? st.free_gb + " GB" : "unknown"],
       ["Incidents use", st.incidents_gb + " GB of " + st.max_total_gb + " GB"],
     ]);
@@ -69,6 +71,10 @@ async function refreshStatus() {
     if (c.stops_in_s != null && !c.keepalive_active) {
       notes.push("The printer will stop the camera in about " + c.stops_in_s + " s. Auto camera is not active, " +
         "so keep the camera view open in the Snapmaker app to keep footage coming.");
+    }
+    const ap = s.autopause || {};
+    if (ap.pending_in_s != null) {
+      notes.push("Guardian will pause the print in about " + ap.pending_in_s + " s unless the printer pauses itself. Reason: " + ap.pending_reason);
     }
     if (c.last_error) notes.push("Camera: " + c.last_error);
     if (em.enabled && !em.configured) notes.push("Email alerts are on but no Resend API key was found. Set your own key (see the README). Alerts will not be sent.");

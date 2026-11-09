@@ -4,11 +4,15 @@ It only sends the calls in ALLOWED_METHODS. These are standard Moonraker calls a
 they worked on one real U1 (Moonraker 1.4.1). Nothing here can send G-code, pause,
 heat or move. A test checks that.
 
-The one exception (owner approved, 2026-11-09): `camera.start_monitor` with exactly
-CAMERA_START_PARAMS, and only when the client was created with allow_camera_start=True.
-It turns on the printer's camera pictures for LAN viewers. It does not move, heat or
-pause anything. Verified on a real U1: pictures start within about 2 s. There is no
-stop call, so Guardian can never turn off somebody else's camera view.
+Two exceptions, both owner approved (2026-11-09), each behind its own switch:
+
+- `camera.start_monitor` with exactly CAMERA_START_PARAMS (allow_camera_start). It turns on
+  the printer's camera pictures for LAN viewers. It does not move, heat or pause anything.
+  Verified on a real U1: pictures start within about 2 s. There is no stop call, so Guardian
+  can never turn off somebody else's camera view.
+- `printer.print.pause` with no params (allow_pause). Standard Moonraker. On the U1 it runs
+  Klipper's PAUSE (read in pause_resume.py), which refuses when not printing or already
+  paused. Never resume, cancel or anything else. Not yet sent to a real printer: UNVERIFIED live.
 
 Behavior from spec section 5.2:
 - one persistent connection, reconnect with backoff (1 s up to 30 s)
@@ -38,6 +42,7 @@ log = logging.getLogger(__name__)
 ALLOWED_METHODS = frozenset({"server.info", "printer.objects.list", "printer.objects.subscribe"})
 CAMERA_START = "camera.start_monitor"
 CAMERA_START_PARAMS = {"domain": "lan", "interval": 0}
+PAUSE = "printer.print.pause"
 
 _ID_INFO, _ID_LIST, _ID_SUBSCRIBE = 1, 2, 3
 
@@ -53,6 +58,7 @@ class MoonrakerClient:
         backoff_start_s: float = 1.0,
         backoff_cap_s: float = 30.0,
         allow_camera_start: bool = False,
+        allow_pause: bool = False,
     ) -> None:
         self.url = f"ws://{host}:{port}/websocket"
         self.bus = bus
@@ -64,12 +70,14 @@ class MoonrakerClient:
         self.last_message_utc: datetime | None = None
         self.sent_methods: list[str] = []  # for tests and the audit trail
         self.allow_camera_start = allow_camera_start
+        self.allow_pause = allow_pause
         self._ws = None
         self._next_id = 1000
 
     async def _send(self, ws, rpc_id: int, method: str, params: dict | None = None) -> None:
         camera_ok = self.allow_camera_start and method == CAMERA_START and params == CAMERA_START_PARAMS
-        if method not in ALLOWED_METHODS and not camera_ok:
+        pause_ok = self.allow_pause and method == PAUSE and params is None
+        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok:
             raise RuntimeError(f"refusing to send {method}: not on the read-only list")
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": rpc_id}
         if params is not None:
@@ -84,6 +92,15 @@ class MoonrakerClient:
             return False
         self._next_id += 1
         await self._send(ws, self._next_id, CAMERA_START, dict(CAMERA_START_PARAMS))
+        return True
+
+    async def pause_print(self) -> bool:
+        """Ask the printer to pause the print. Returns False if not connected."""
+        ws = self._ws
+        if ws is None or not self.connected:
+            return False
+        self._next_id += 1
+        await self._send(ws, self._next_id, PAUSE)
         return True
 
     async def run(self, stop: asyncio.Event) -> None:
@@ -150,6 +167,9 @@ class MoonrakerClient:
                 "printer_ts": data["result"].get("eventtime"),
                 "recv_utc": recv_utc, "recv_mono": recv_mono,
             })
+        elif isinstance(rpc_id, int) and rpc_id > 1000 and "error" in data:
+            # A reply to one of the two opt-in requests. Log it so a refusal is visible.
+            log.warning("the printer refused request %s: %s", rpc_id, data.get("error"))
         elif "method" in data:
             printer_ts = None
             params = data.get("params")

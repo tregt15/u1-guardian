@@ -33,13 +33,13 @@ STALE_COOLDOWN_S = 30.0  # if the camera does not come back, do not hammer the p
 
 
 class CameraKeepalive:
-    def __init__(self, mode: str, session: CameraSessionWatch, clock: Clock, *,
+    def __init__(self, mode: str | Callable[[], str], session: CameraSessionWatch, clock: Clock, *,
                  print_state: Callable[[], str | None],
                  last_frame: Callable[[], datetime | None],
                  frames_watched: Callable[[], bool],
                  send: Callable[[], Awaitable[bool]],
                  audit: Callable[[str, dict], Any] | None = None) -> None:
-        self.mode = mode
+        self._mode = mode  # a callable is read every time, so a settings change applies at once
         self.session = session
         self.clock = clock
         self._print_state = print_state
@@ -51,6 +51,10 @@ class CameraKeepalive:
         self._last_sent_utc: datetime | None = None
         self.last_reason: str | None = None
         self.sent_count = 0
+
+    @property
+    def mode(self) -> str:
+        return self._mode() if callable(self._mode) else self._mode
 
     def wanted(self) -> bool:
         if self.mode == "always":
