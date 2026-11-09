@@ -75,8 +75,8 @@ Then open `http://guardian.local:8080/` on your computer.
 
 ## 5. The camera limit (important)
 
-The U1 camera only gives pictures while the Snapmaker app or the printer screen is showing the
-camera. If nobody is looking, there is no footage, and Guardian will say so on the incident
+The U1 camera only gives pictures while the Snapmaker app is showing the camera view. (Whether the
+printer's touchscreen does this too is UNVERIFIED.) If nobody is looking, there is no footage, and Guardian will say so on the incident
 instead of pretending. Keep the camera view open on a phone or tablet during prints you care about.
 
 ## 6. Email alerts (optional)

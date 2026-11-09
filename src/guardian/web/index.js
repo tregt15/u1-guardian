@@ -53,7 +53,7 @@ async function refreshStatus() {
     const w = document.getElementById("warnings");
     const notes = [...(st.warnings || [])];
     if (c.mode === "snapshot" && !viewing) {
-      notes.push("The U1 camera only gives pictures while the Snapmaker app or the printer screen is showing the camera. Nobody is viewing now, so an incident right now would have no footage.");
+      notes.push("No new camera picture" + (c.last_frame_utc ? " since " + ago(c.last_frame_utc) : " yet") + ". The U1 camera only gives pictures while the Snapmaker app is showing the camera view. An incident right now would have no footage.");
     }
     if (c.stops_in_s != null) {
       notes.push("The printer will stop the camera in about " + c.stops_in_s + " s. Guardian cannot keep it on. " +

@@ -264,7 +264,7 @@ class IncidentManager:
             status = "missing"
             if self.cfg.camera.snapshot_url:
                 notes.append("No video frames were available for this window. The U1 camera only gives "
-                             "pictures while the Snapmaker app or the printer screen is showing the camera.")
+                             "pictures while the Snapmaker app is showing the camera view.")
             else:
                 notes.append("No video segments were available for this window (camera down or buffer empty).")
             notes += self._camera_session_notes(inc)

@@ -22,7 +22,7 @@ What exists so far (Milestone 0, no printer needed):
 - Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
   or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
 - Alert when the filament feeder reports an error (seen once on a real U1)
-- Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app or the printer screen has the camera on (about 1 frame per second)
+- Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app has the camera view open (the printer's touchscreen is UNVERIFIED) (about 1 frame per second)
 
 What was seen on a real U1 is in `docs/u1-discovery-notes.md`. Anything not listed there, like Snapmaker's own
 spaghetti and bed alerts, is **unverified**. Guardian does not pretend to detect those.

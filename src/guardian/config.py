@@ -41,7 +41,7 @@ class CameraConfig(_Section):
     source_url: str = ""
     # Snapshot polling (U1, verified on one printer): GET a JPEG about once a second.
     # On the U1 this is http://<host>/server/files/camera/monitor.jpg. It only changes while
-    # a viewer (app or screen) has the camera on. Empty means do not use snapshot mode.
+    # the Snapmaker app has the camera view on (touchscreen UNVERIFIED). Empty means do not use snapshot mode.
     snapshot_url: str = ""
     snapshot_poll_s: float = Field(default=0.5, gt=0.05, le=5.0)
     # A segment longer than segment_length_s + this is treated as hiding a footage gap.
