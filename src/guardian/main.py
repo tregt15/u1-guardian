@@ -374,6 +374,8 @@ class App:
                 log.exception("auto pause tick failed")
             try:
                 await self.vision.tick()
+                if self.cfg.ai.enabled:
+                    await self.ai.refresh()  # at most once a minute, so the dashboard shows the real AI state
             except Exception:  # noqa: BLE001
                 log.exception("AI check tick failed")
             try:
