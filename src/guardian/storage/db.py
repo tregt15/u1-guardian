@@ -186,6 +186,22 @@ class Database:
                 (incident_id,),
             ).fetchall()
 
+    # ---- notification log ----
+
+    def log_notification(self, incident_id: int | None, ts_utc: str, channel: str, kind: str,
+                         status: str, attempts: int, error: str | None) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO notification_log (incident_id, ts_utc, channel, kind, status, attempts, error)"
+                " VALUES (?,?,?,?,?,?,?)", (incident_id, ts_utc, channel, kind, status, attempts, error))
+
+    def list_notifications(self, limit: int = 50) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(
+                "SELECT n.*, i.uid AS incident_uid FROM notification_log n"
+                " LEFT JOIN incidents i ON i.id = n.incident_id ORDER BY n.id DESC LIMIT ?",
+                (limit,)).fetchall()
+
     # ---- logs ----
 
     def log(self, component: str, severity: str, message: str, metadata: dict | None = None) -> None:

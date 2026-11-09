@@ -92,6 +92,65 @@ class StorageConfig(_Section):
         return self.resolved_data_dir() / "incidents"
 
 
+
+
+def _valid_address(addr: str) -> bool:
+    """Plain check: one @, a dot after it, no control characters (stops header tricks).
+    Accepts 'name@host.tld' and 'Display Name <name@host.tld>'."""
+    if any(ord(ch) < 32 for ch in addr) or len(addr) > 320:
+        return False
+    if "<" in addr:
+        if not addr.endswith(">") or addr.count("<") != 1:
+            return False
+        addr = addr[addr.index("<") + 1 : -1]
+    local, sep, domain = addr.partition("@")
+    return bool(sep and local and "." in domain and "@" not in domain and " " not in addr)
+
+
+Severity = Literal["info", "warning", "critical"]
+
+
+class EmailConfig(_Section):
+    """Email through Resend's HTTPS API. Off by default. Guardian never ships an API key:
+    every user makes their own free Resend account and key (see README)."""
+
+    enabled: bool = False
+    provider: Literal["resend"] = "resend"  # generic SMTP is not built yet
+    # Name of the environment variable that holds YOUR key. RESEND_API_KEY (Resend's own
+    # usual name) is also accepted. The key itself must never be put in this file.
+    api_key_env: str = "GUARDIAN_RESEND_KEY"
+    # Resend's test sender can only deliver to the email address of your own Resend account.
+    from_addr: str = "Guardian <onboarding@resend.dev>"
+    to_addrs: list[str] = []
+
+    @model_validator(mode="after")
+    def _check(self) -> EmailConfig:
+        for a in [self.from_addr, *self.to_addrs]:
+            if not _valid_address(a):
+                raise ValueError(f"not a valid email address: {a!r}")
+        if self.enabled and not self.to_addrs:
+            raise ValueError("notifications.email.to_addrs needs at least one address when email is enabled")
+        return self
+
+    def api_key(self) -> str:
+        return os.environ.get(self.api_key_env, "") or os.environ.get("RESEND_API_KEY", "")
+
+
+class NotificationsConfig(_Section):
+    base_url: str = "http://127.0.0.1:8080"  # used for links in messages
+    min_severity: Severity = "warning"
+    cooldown_s: float = Field(default=60.0, ge=0)  # per event type
+    send_on: list[Literal["incident_created", "clip_ready", "health"]] = ["incident_created", "clip_ready"]
+    attach_clip: bool = False  # not built. Clips never leave your network.
+    email: EmailConfig = EmailConfig()
+
+    @model_validator(mode="after")
+    def _no_attach(self) -> NotificationsConfig:
+        if self.attach_clip:
+            raise ValueError("attach_clip is not built yet. Messages are text only.")
+        return self
+
+
 LOCAL_BINDS = {"127.0.0.1", "::1", "localhost"}
 
 
@@ -100,7 +159,6 @@ class ApiConfig(_Section):
     bind: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
     token: str = ""  # or env var GUARDIAN_API_TOKEN. Never put a real token in a committed file.
-    base_url: str = ""  # used for links in messages later
 
     @property
     def effective_token(self) -> str:
@@ -126,6 +184,7 @@ class Config(_Section):
     blackbox: BlackboxConfig = BlackboxConfig()
     storage: StorageConfig = StorageConfig()
     api: ApiConfig = ApiConfig()
+    notifications: NotificationsConfig = NotificationsConfig()
 
 
 def default_config_path() -> Path:

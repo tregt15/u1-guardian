@@ -41,3 +41,17 @@ api:
   bind: 127.0.0.1             # local only. To reach it from other computers use 0.0.0.0 and set a token.
   port: 8080
   token: ""                   # or env var GUARDIAN_API_TOKEN. Required when bind is not local.
+
+notifications:
+  base_url: "http://127.0.0.1:8080"   # used for links in messages. Use your host name or IP for other devices.
+  min_severity: warning               # info | warning | critical
+  cooldown_s: 60                      # per event type
+  send_on: [incident_created, clip_ready]
+  email:
+    enabled: false
+    # Guardian never ships an API key. Make your own free Resend account and key, then put the
+    # key in the environment variable below (or in a .env file next to this config).
+    # NEVER write the key in this file.
+    api_key_env: GUARDIAN_RESEND_KEY  # RESEND_API_KEY also works
+    from_addr: "Guardian <onboarding@resend.dev>"   # Resend's test sender only reaches your own Resend account email
+    to_addrs: []                      # for example ["you@example.com"]

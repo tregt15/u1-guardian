@@ -51,6 +51,7 @@ class ApiContext:
     status_fn: Callable[[], dict]  # live printer/camera info from the running app
     trigger_fn: Callable[..., Awaitable[Any]]  # (event_type, source, severity, key, metadata)
     started_utc: datetime
+    notifier: Any = None  # NotificationManager or None
     extra: dict = field(default_factory=dict)
 
 
@@ -58,6 +59,11 @@ class PatchBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     protected: bool | None = None
     user_note: str | None = Field(default=None, max_length=2000)
+
+
+class TestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channel: Literal["email"] = "email"
 
 
 class ManualBody(BaseModel):
@@ -265,6 +271,19 @@ def create_app(ctx: ApiContext) -> FastAPI:
         rows = db.list_toolchanges(limit)
         return {"toolchanges": [dict(r) for r in rows],
                 "note": "Tool change recording is not built yet." if not rows else None}
+
+    @app.post("/api/notifications/test", dependencies=[Depends(auth)])
+    async def notifications_test(body: TestBody) -> dict:
+        if ctx.notifier is None:
+            raise HTTPException(409, "notifications are not set up")
+        result = await ctx.notifier.send_test(body.channel)
+        if not result["ok"]:
+            raise HTTPException(502, result["error"])
+        return result
+
+    @app.get("/api/notifications/log", dependencies=[Depends(auth)])
+    async def notifications_log(limit: int = Query(50, ge=1, le=200)) -> dict:
+        return {"log": [dict(r) for r in db.list_notifications(limit)]}
 
     @app.get("/api/events/stream", dependencies=[Depends(auth)])
     async def event_stream(request: Request) -> StreamingResponse:

@@ -30,12 +30,20 @@ async function refreshStatus() {
       ["Disk free", st.free_gb != null ? st.free_gb + " GB" : "unknown"],
       ["Incidents use", st.incidents_gb + " GB of " + st.max_total_gb + " GB"],
     ]);
+    const em = (s.notifications || {}).email || {};
+    fill(document.getElementById("email"), [
+      ["Alerts", em.enabled ? badge("on", "ok") : badge("off", "warn")],
+      ["API key", em.enabled ? (em.configured ? badge("found", "ok") : badge("missing", "bad")) : "not needed"],
+      ["Sends to", em.enabled ? em.to_count + " address(es)" : "n/a"],
+    ]);
+    document.getElementById("email-test").hidden = !(em.enabled && em.configured);
     const w = document.getElementById("warnings");
     const notes = [...(st.warnings || [])];
     if (c.mode === "snapshot" && !viewing) {
       notes.push("The U1 camera only gives pictures while the Snapmaker app or the printer screen is showing the camera. Nobody is viewing now, so an incident right now would have no footage.");
     }
     if (c.last_error) notes.push("Camera: " + c.last_error);
+    if (em.enabled && !em.configured) notes.push("Email alerts are on but no Resend API key was found. Set your own key (see the README). Alerts will not be sent.");
     w.replaceChildren(...notes.map(n => el("div", { class: "notice warn" }, n)));
   } catch (e) {
     document.getElementById("conn").textContent = "Cannot reach Guardian: " + e.message;
@@ -89,6 +97,20 @@ document.getElementById("manual").addEventListener("click", async (ev) => {
   ev.target.disabled = false;
 });
 
-refreshStatus(); loadIncidents(true);
+async function loadEmailLog() {
+  try {
+    const r = await api("/api/notifications/log?limit=5");
+    document.getElementById("email-log").replaceChildren(...r.log.map(n =>
+      el("li", {}, shortTime(n.ts_utc) + " " + n.kind + ": " + n.status + (n.error ? " (" + n.error + ")" : ""))));
+  } catch (e) { /* the log is optional */ }
+}
+document.getElementById("email-test").addEventListener("click", async (ev) => {
+  ev.target.disabled = true;
+  try { await api("/api/notifications/test", { method: "POST", body: JSON.stringify({ channel: "email" }) }); alert("Test email sent. Check your inbox."); }
+  catch (e) { alert("Test failed: " + e.message); }
+  ev.target.disabled = false; loadEmailLog();
+});
+
+refreshStatus(); loadIncidents(true); loadEmailLog();
 setInterval(refreshStatus, 5000);
 listen(() => loadIncidents(true));

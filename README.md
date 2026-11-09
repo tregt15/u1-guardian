@@ -40,6 +40,24 @@ python -m guardian.main --config config.yaml
 
 Then open http://127.0.0.1:8080/ in a browser. The API only listens on this computer unless you change `api.bind`. If you do, set a token (`api.token` or the `GUARDIAN_API_TOKEN` environment variable). Recordings can show the inside of your home or workshop, so treat them as private.
 
+## Email alerts (optional, bring your own key)
+
+Guardian can email you when an incident starts and again when the clip is ready. It uses
+[Resend](https://resend.com). Guardian does not include a key and never pays for your email.
+You make your own free Resend account and key, so any cost is between you and Resend.
+
+1. Create a Resend account and an API key.
+2. Put the key in the environment variable `GUARDIAN_RESEND_KEY` (`RESEND_API_KEY` also works).
+   An easy way is a file named `.env` next to your `config.yaml`, with one line:
+   `GUARDIAN_RESEND_KEY=your_key_here`. The `.env` file is ignored by git. Never put the key in
+   `config.yaml` and never commit it.
+3. In `config.yaml`, set `notifications.email.enabled: true` and list your address in `to_addrs`.
+4. Open the dashboard and press "Send test email".
+
+Resend's test sender (`onboarding@resend.dev`) only delivers to the email address of your own Resend
+account. To send to other people, verify your own domain in Resend and change `from_addr`.
+Messages are plain text. Clips are never attached, so video never leaves your network.
+
 ## Requirements
 
 - Python 3.11 or newer

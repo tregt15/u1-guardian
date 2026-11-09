@@ -25,7 +25,10 @@ from guardian.bus import EventBus
 from guardian.camera.capture import Capture, FFmpegMissing, check_ffmpeg
 from guardian.camera.segment_buffer import SegmentBuffer
 from guardian.clock import Clock, SystemClock, to_iso
-from guardian.config import Config, ConfigError, load_config
+from guardian.config import Config, ConfigError, default_config_path, load_config
+from guardian.env import load_dotenv
+from guardian.notify.email import ResendEmailChannel
+from guardian.notify.manager import NotificationManager
 from guardian.printer.detectors import Detector
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
@@ -67,8 +70,13 @@ class App:
         self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin,
                                active=self._buffer_wanted)
         self.started_utc = self.clock.now_utc()
+        channels = []
+        if cfg.notifications.email.enabled:
+            channels.append(ResendEmailChannel(cfg.notifications.email))
+        self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock)
         self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
-                                         trigger_fn=self._report, started_utc=self.started_utc))
+                                         trigger_fn=self._report, started_utc=self.started_utc,
+                                         notifier=self.notifier))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.disconnected", self._log_event)
@@ -122,6 +130,12 @@ class App:
                 "last_frame_utc": to_iso(last) if last else None, "last_error": self.capture.last_error,
             },
             "incidents": {"open": self.manager.open_count},
+            "notifications": {"email": {
+                "enabled": self.cfg.notifications.email.enabled,
+                # Only whether a key exists. The key itself is never shown.
+                "configured": bool(self.cfg.notifications.email.api_key()),
+                "to_count": len(self.cfg.notifications.email.to_addrs),
+            }},
         }
 
     async def _serve_api(self, stop: asyncio.Event) -> None:
@@ -148,6 +162,7 @@ class App:
             asyncio.create_task(self.capture.supervise(stop), name="capture"),
             asyncio.create_task(self.client.run(stop), name="printer"),
             asyncio.create_task(self._tick_loop(stop), name="ticks"),
+            asyncio.create_task(self.notifier.run(stop), name="notify"),
         ]
         if self.cfg.api.enabled:
             tasks.append(asyncio.create_task(self._serve_api(stop), name="api"))
@@ -178,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # Each user keeps their own secrets (for example their Resend key) in the environment or a .env file.
+    env_files = [Path.cwd() / ".env", default_config_path().parent / ".env"]
+    if args.config:
+        env_files.insert(0, args.config.parent / ".env")
+    load_dotenv(*env_files)
     try:
         cfg = load_config(args.config)
         app = App(cfg)
