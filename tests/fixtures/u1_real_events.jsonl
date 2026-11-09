@@ -1,0 +1,30 @@
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["!! [print_task_config] nozzle diameter mismatch:f_0 != e_0.4"]}
+{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":531,"index":0,"code":14,"level":3,"message":"[print_task_config] nozzle diameter mismatch:f_0 != e_0.4","timestamp":1794175809.7050958}]}
+{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":531,"index":0,"code":7,"level":1,"message":"Failed to start print: [print_task_config] nozzle diameter mismatch:f_0 != e_0.4","timestamp":1794175809.806789}]}
+{"jsonrpc":"2.0","method":"notify_camera_status_change","params":[{"monitor_domain":"lan","monitoring":true,"timestamp":"2026-11-08 22:10:38"}]}
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["!! [print_task_config] nozzle diameter mismatch:f_0 != e_0.4"]}
+{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":531,"index":0,"code":14,"level":3,"message":"[print_task_config] nozzle diameter mismatch:f_0 != e_0.4","timestamp":1794175869.9886816}]}
+{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":531,"index":0,"code":7,"level":1,"message":"Failed to start print: [print_task_config] nozzle diameter mismatch:f_0 != e_0.4","timestamp":1794175870.0738544}]}
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING"]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"filename":"sheep10_test.gcode","state":"printing","info":{"total_layer":501,"current_layer":0}},"machine_state_manager":{"main_state":1}},5709.21877793]}
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING with action PRINT_BED_DETECTING"]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":136},"toolhead":{"extruder":"extruder1"}},5742.063759112]}
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING with action IDLE"]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":132}},5761.63648683]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder"}},5766.146918166]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder1"}},5769.655718917]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":133},"toolhead":{"extruder":"extruder2"}},5773.192568086]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder"}},5777.212505338]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_motion_sensor e0_filament":{"filament_detected":true}},5782.975431799]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":0}},5865.201074463]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":133}},5865.702283213]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder1"}},5869.773613298]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_motion_sensor e1_filament":{"filament_detected":true}},5876.288535468]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":0}},5934.214318037]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":133}},5934.465237996]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder2"}},5938.224501956]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":0}},5950.508466545]}
+{"jsonrpc":"2.0","method":"notify_gcode_response","params":["!! extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!"]}
+{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":525,"index":2,"code":32,"level":2,"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!","timestamp":1794176170.958418}]}
+{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"state":"paused","exception":{"id":525,"index":2,"code":32,"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!","level":2},"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!"}},5950.759511337]}
+{"jsonrpc":"2.0","method":"notify_camera_status_change","params":[{"monitor_domain":"lan","monitoring":false,"timestamp":"2026-11-08 22:18:51"}]}
