@@ -129,3 +129,50 @@ Seen in `unisrv.log` and in Guardian's frame times, with the camera view open on
   Expect this kind of gap about every 5 to 10 minutes while a viewer keeps the camera on. UNVERIFIED how regular it is.
 - The printer's own AI asks for a picture about every 45 seconds during a print (`camera.detect_capture` in the log).
   The `print_check` (noodle) model is loaded inside `unisrv`. This is separate from the viewer's snapshot file.
+
+
+## Second print (2026-11-09): a full print with 399 tool changes
+
+Recorded with `tools/ws_recorder.py` for 8 hours (151,736 lines, kept local in `recordings/print2.jsonl`). The recorder
+joined about 1 hour in (layer 2 of 501). Same file `sheep10_test.gcode`. The print ended normally at 07:23:02 UTC
+(`print_stats.state` -> `complete`, `notify_history_changed` action `finished`). No errors, no exceptions.
+
+Tool changes, verified on a real U1:
+
+- 399 tool changes. Pairs: T0->T1 152, T1->T0 149, T1->T2 49, T2->T1 47, T2->T0 2. Every one finished.
+- Each change took 3 to 5 s (median 4 s), measured from the gcode line to `toolhead.extruder` changing.
+  Times are whole seconds from the recorder, so they are only good to about 1 s.
+- The order of messages for a change from tool A to tool B:
+  1. `notify_gcode_response` `// A -> B`, then `// park A !!!`
+  2. `B.activating_move = true`
+  3. `A.state = "PARKED"`, `A.park_pin = true`, `A.active_pin = false`, `A.grab_valid_pin = false`
+  4. `// pick B !!!`
+  5. `B.state = "UNKNOWN"`, `B.active_pin = true`, `B.state = "ACTIVATE"`, `B.park_pin = false`, `B.grab_valid_pin = true`
+  6. `// Activating extruder B`, then `toolhead.extruder = "B"`, `B.activating_move = false`, `B.switch_count` + 1
+  Object names: tool 0 is `extruder`, tools 1 to 3 are `extruder1` to `extruder3`.
+- The order inside steps 3 and 5 changes from one change to the next (6 different orders seen). Only the end state is
+  the same every time. So Guardian checks the end state, not the order.
+- Once, the first time T2 was used (03:10:52), `B.active_pin` went true, false, true and `B.state` went
+  `UNKNOWN`, `PARKED`, `ACTIVATE` within one second. The change still finished normally. Right after it the printer set
+  action code `PRINT_PREEXTRUDING` (`machine_state_manager.action_code` 134) for 14 s.
+- In print 1 the next change's `// B -> C` line sometimes arrived before `toolhead.extruder = "B"` from the change before.
+  So a change counts as done on `// Activating extruder B` or `toolhead.extruder = "B"`, whichever comes first.
+
+Action codes now verified by name (from gcode responses "Set action code ..."): 0 `IDLE`, 132 `PRINT_SWITCH_CHECKING`,
+133 `PRINT_AUTO_FEEDING`, 134 `PRINT_PREEXTRUDING`, 136 `PRINT_BED_DETECTING`.
+
+Print 1 failure, looked at again: it was NOT a failed tool change. The change to T2 finished at 22:15:57. Then the
+filament load on T2 failed 12 s later. The first sign is `filament_feed right.extruder2.channel_error = "wheel_speed"`
+(22:16:09), then `channel_state = "load_fail"`, then the `!!` gcode line, then the exception (22:16:10). The
+`filament_feed` object goes through `load_picking`, `load_feeding`, `load_heating`, `load_extruding`, `load_flushing`,
+`load_finish` on a good load.
+
+Camera, verified:
+
+- `notify_camera_monitoring_to_stop` `{remain: N}` counts down about once a second from about 50 to 0, then
+  `notify_camera_status_change` `monitoring: false` follows. This is a 50 s warning before the camera stops. Seen in
+  both prints.
+- In print 2 the camera was off from 02:01:43 to 05:45:05, then on until the end. The short lapse at 06:18 seen in
+  `unisrv.log` did NOT show up as a `notify_camera_status_change` on the WebSocket. So the WebSocket does not report
+  every gap. Guardian's own frame times are the only honest record.
+- No detection (noodle, spaghetti) messages were seen on the WebSocket in either print.
