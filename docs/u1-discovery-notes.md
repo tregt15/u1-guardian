@@ -96,3 +96,23 @@ Camera, verified:
 - The detector wrote 6 frame pairs to `/userdata/.tmp_detect_result/{org,det}` in the first minute of the print (22:12:37 to
   22:13:01, log shows "first" and "last"). That looks like a start-of-print check. No `noodle` detection frames were seen,
   but the print paused before the main layers.
+
+
+## How the Snapmaker app and Snapmaker Orca get the camera (2026-11-09)
+
+Verified by reading logs only (printer `unisrv.log`, Moonraker log, and the log of Orca's helper program
+`snapmaker_control` on the PC). Nothing was sent to the printer for this.
+
+- Viewers on the LAN (the phone app, Orca's embedded browser) read the picture with
+  `GET /server/files/camera/monitor.jpg?_nocache=...` on port 80. That is the same file Guardian polls.
+- What turns the camera on is a request `camera.start_monitor` that reaches `unisrv` through the printer's cloud
+  connection (an MQTT link to Snapmaker's cloud). The printer log says `domain is wan`, and the viewer renews it about every
+  5 minutes. `camera.stop_monitor` ends it. The printer announces changes with `notify_camera_status_change`.
+- Orca's helper `snapmaker_control` listens only on this PC's loopback port and sends every request through the cloud
+  gateway ("wan"). Its log has no LAN route at all. So Orca is NOT a separate local path to the camera.
+- While monitoring is on through this route, the printer uploads each frame to Snapmaker's cloud (seen earlier in
+  `unisrv.log`: "Upload ... monitor.enc"). Guardian itself never uploads anything.
+- UNVERIFIED: whether any local-only way to start monitoring exists. The printer's own web page (Fluidd) has no code
+  for it. Guardian does not send `camera.start_monitor` and cannot start the camera on its own.
+- The printer's web server access log is empty, so which client asked for what could only be read from Moonraker's
+  log and the helper's log.
