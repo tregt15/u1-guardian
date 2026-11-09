@@ -70,3 +70,29 @@ the installed nozzle is 0.4, so the check fails. Likely the sliced file or the a
 Exact reason is UNVERIFIED. Nothing was changed on the printer. `print_stats.state` stayed `standby`.
 
 This is a good example of an event Guardian should record, but it is a pre-print failure, not a mid-print one.
+
+## First real print (2026-11-08 to 11-09): a mid-print failure was recorded
+
+Recorded with `tools/ws_recorder.py --camera-watch` for 3 hours (57,834 lines, kept local in `recordings/`).
+Print file: `sheep10_test.gcode`, 501 layers, started from the printer's screen at 22:12:08 UTC.
+
+Verified timeline on a real U1 (UTC):
+
+- 22:12:08 `print_stats.state` goes `printing`, `machine_state_manager.main_state` = 1. Gcode response "Changed main state to PRINTING".
+- 22:12:41 to 22:16:09 `machine_state_manager.action_code` changes 136, 132, 133, 0, ... (meanings UNVERIFIED, likely heating, filament load and tool prep).
+  `filament_motion_sensor e0_filament` and `e1_filament` go `filament_detected: true` as tools load.
+- 22:16:09 gcode response `!! extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!`
+- 22:16:10 `notify_exception_notification` `{id: 525, index: 2, code: 32, level: 2}` and `print_stats.state` goes `paused`
+  with `print_stats.exception` filled in. The print paused itself 4 minutes in. It was still paused 3 hours later.
+  Guardian could trigger on `print_stats.state -> paused` plus `exception`, or on `notify_exception_notification`.
+
+Camera, verified:
+
+- `notify_camera_status_change` `{monitor_domain: "lan", monitoring: true/false}` fires when monitoring starts and stops.
+- `monitor.jpg` changed on every poll while monitoring was true. When it went false (22:18:50) it never changed again for the
+  next 2 h 50 min, even with a print paused with an error. So the snapshot only exists while a viewer asks for it.
+  Guardian cannot get footage from this path on its own. UNVERIFIED: whether anything else (touchscreen, a LAN request)
+  can turn monitoring on without the app.
+- The detector wrote 6 frame pairs to `/userdata/.tmp_detect_result/{org,det}` in the first minute of the print (22:12:37 to
+  22:13:01, log shows "first" and "last"). That looks like a start-of-print check. No `noodle` detection frames were seen,
+  but the print paused before the main layers.
