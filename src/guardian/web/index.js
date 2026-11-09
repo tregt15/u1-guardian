@@ -18,11 +18,16 @@ async function refreshStatus() {
       ["Tool head", p.active_toolhead || "unknown"],
     ]);
     const viewing = c.viewer_active;
+    const printing = ["printing", "paused"].includes(p.print_state);
     fill(document.getElementById("camera"), [
       ["Source", c.mode || "unknown"],
       ["Capture", c.running ? badge("running", "ok") : badge("stopped", "bad")],
       ["Last new frame", c.last_frame_utc ? ago(c.last_frame_utc) : "none yet"],
-      ["Footage now", c.mode === "snapshot" ? (viewing ? badge("being saved", "ok") : badge("not available", "warn")) : "n/a"],
+      ["Footage now", c.mode !== "snapshot" ? "n/a" : viewing ? badge("being saved", "ok") :
+        c.keepalive_active ? badge("turning camera on", "warn") :
+        !printing ? badge("not recording (no print)", "info") : badge("not available", "warn")],
+      ["Auto camera", el("span", {}, ({ off: "off", printing: "on during prints", always: "always on" })[c.keepalive] || "off",
+        c.keepalive_last_utc ? el("div", { class: "muted" }, "last asked " + ago(c.keepalive_last_utc) + ": " + c.keepalive_last_reason) : null)],
       ["Printer camera", el("span", {},
         c.stops_in_s != null ? badge("stops in " + c.stops_in_s + " s", "warn") :
           c.session == null ? "no news since Guardian started" :
@@ -53,11 +58,17 @@ async function refreshStatus() {
     const w = document.getElementById("warnings");
     const notes = [...(st.warnings || [])];
     if (c.mode === "snapshot" && !viewing) {
-      notes.push("No new camera picture" + (c.last_frame_utc ? " since " + ago(c.last_frame_utc) : " yet") + ". The U1 camera only gives pictures while the Snapmaker app is showing the camera view. An incident right now would have no footage.");
+      if (c.keepalive_active) {
+        const tried = c.keepalive_last_utc ? (Date.now() - new Date(c.keepalive_last_utc).getTime()) / 1000 : 0;
+        if (tried > 30) notes.push("Guardian asked the printer to turn the camera on, but no new picture has come in yet. Last try " + ago(c.keepalive_last_utc) + ".");
+      } else if (printing) {
+        notes.push("A print is running but no new camera picture" + (c.last_frame_utc ? " since " + ago(c.last_frame_utc) : " yet") +
+          ". Auto camera is off, so pictures only come while the Snapmaker app shows the camera view. An incident right now would have no footage.");
+      }
     }
-    if (c.stops_in_s != null) {
-      notes.push("The printer will stop the camera in about " + c.stops_in_s + " s. Guardian cannot keep it on. " +
-        "Open the camera view in the Snapmaker app (or keep it open) to keep footage coming.");
+    if (c.stops_in_s != null && !c.keepalive_active) {
+      notes.push("The printer will stop the camera in about " + c.stops_in_s + " s. Auto camera is not active, " +
+        "so keep the camera view open in the Snapmaker app to keep footage coming.");
     }
     if (c.last_error) notes.push("Camera: " + c.last_error);
     if (em.enabled && !em.configured) notes.push("Email alerts are on but no Resend API key was found. Set your own key (see the README). Alerts will not be sent.");

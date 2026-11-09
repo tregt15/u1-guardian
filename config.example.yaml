@@ -17,6 +17,9 @@ camera:
   standin_codec: h264         # h264 | mjpeg. Only used for the stand-in video.
   segment_length_s: 2
   latency_offset_ms: 0        # set by calibration later
+  # Auto camera: let Guardian turn the U1 camera on by itself (LAN only, it never turns it off).
+  # off | printing (default: only while a print runs or is paused) | always
+  keepalive: printing
   ffmpeg_path: ffmpeg
   ffprobe_path: ffprobe
 

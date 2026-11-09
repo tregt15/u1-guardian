@@ -3,9 +3,10 @@
 Every rule here is based on a message seen on a real U1 (2026-11-08, Moonraker 1.4.1),
 except where marked UNVERIFIED. See docs/u1-discovery-notes.md.
 
-NOT built, because no channel was found yet (detection catalog stays Unverified):
-spaghetti, bed adhesion, air printing, bed obstruction, filament runout. Guardian does
-not pretend to detect them.
+Snapmaker's own camera AI (dirty bed, spaghetti, residue, dirty nozzle) is read from
+exception 532, found in the printer's source code. See AI_DETECTIONS.
+NOT built, because no channel was found yet: bed adhesion, air printing, filament runout.
+Guardian does not pretend to detect them.
 
 Read only. This only turns events into report_incident calls.
 """
@@ -22,6 +23,17 @@ from guardian.printer.state_tracker import StateTracker
 log = logging.getLogger(__name__)
 
 # async (event_type, source, severity, dedup_key, metadata) -> anything
+
+# The printer's own camera AI (Snapmaker `defect_detection.py` on the U1, read over SSH 2026-11-09).
+# On a find it raises exception id 532 with these codes and then pauses the print itself.
+# Read from the printer's source code. Not yet seen happen on a real print, so UNVERIFIED live.
+AI_EXCEPTION_ID = 532
+AI_DETECTIONS = {
+    1: ("bed_not_clear", "The printer's camera check found something on the build plate and paused the print."),
+    2: ("spaghetti_detected", "The printer's camera check saw spaghetti (noodle) and paused the print."),
+    3: ("residue_detected", "The printer's camera check saw residue and paused the print."),
+    4: ("dirty_nozzle_detected", "The printer's camera check saw a dirty nozzle and paused the print."),
+}
 ReportFn = Callable[..., Awaitable[Any]]
 
 
@@ -70,6 +82,13 @@ class Detector:
         # What `level` means is UNVERIFIED, so every exception is a warning here.
         # The print_state rule below raises severity when the print actually stopped.
         key = f"{ex.get('id')}:{ex.get('code')}:{ex.get('index')}"
+        if ex.get("id") == AI_EXCEPTION_ID and ex.get("code") in AI_DETECTIONS:
+            event_type, summary = AI_DETECTIONS[ex["code"]]
+            await self._fire(event_type, "snapmaker_ai", "critical", key, {
+                "exception_id": ex.get("id"), "code": ex.get("code"), "level": ex.get("level"),
+                "message": ex.get("message"), "summary": summary,
+            })
+            return
         await self._fire("printer_exception", "moonraker", "warning", key, {
             "exception_id": ex.get("id"), "code": ex.get("code"), "level": ex.get("level"),
             "index": ex.get("index"), "message": ex.get("message"),

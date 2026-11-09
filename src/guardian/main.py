@@ -23,6 +23,7 @@ from guardian.api.app import ApiContext, create_app
 from guardian.blackbox.incident_manager import IncidentManager
 from guardian.bus import EventBus
 from guardian.camera.capture import Capture, FFmpegMissing, check_ffmpeg
+from guardian.camera.keepalive import CameraKeepalive
 from guardian.camera.segment_buffer import SegmentBuffer
 from guardian.camera.session_watch import CameraSessionWatch
 from guardian.camera.snapshot import FrameBuffer, SnapshotCapture
@@ -76,12 +77,20 @@ class App:
                                              self._report)
         self.camera_session = CameraSessionWatch(
             self.bus, self.clock, note=lambda kind, meta: self.manager.add_note(kind, "printer_camera", meta))
+        keepalive_on = snapshot_mode and cfg.camera.keepalive != "off"
         self.client = MoonrakerClient(cfg.printer.host, printer_port or cfg.printer.moonraker_port,
-                                      self.bus, self.clock)
+                                      self.bus, self.clock, allow_camera_start=keepalive_on)
         if snapshot_mode:
             self.capture = SnapshotCapture(cfg.camera, self.buffer, self.clock, active=self._buffer_wanted)
         else:
             self.capture = Capture(cfg.camera, self.buffer, self.clock, realtime=realtime_standin)
+        self.keepalive = CameraKeepalive(
+            cfg.camera.keepalive if keepalive_on else "off", self.camera_session, self.clock,
+            print_state=lambda: self.tracker.print_state,
+            last_frame=lambda: self.capture.last_frame_utc,
+            frames_watched=lambda: snapshot_mode and self._buffer_wanted(),
+            send=self.client.start_camera_monitor,
+            audit=lambda msg, meta: self.db.log("camera", "info", msg, meta))
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
@@ -142,6 +151,7 @@ class App:
                 "mode": mode, "running": self.capture.running, "viewer_active": viewing,
                 "last_frame_utc": to_iso(last) if last else None, "last_error": self.capture.last_error,
                 **self.camera_session.status(),
+                **self.keepalive.status(),
             },
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
@@ -212,6 +222,10 @@ class App:
                 await self.toolchanger.tick()
             except Exception:  # noqa: BLE001
                 log.exception("tool change tick failed")
+            try:
+                await self.keepalive.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("camera keepalive tick failed")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:

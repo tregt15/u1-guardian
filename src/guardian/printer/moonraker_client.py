@@ -1,8 +1,14 @@
-"""Moonraker WebSocket client. READ ONLY.
+"""Moonraker WebSocket client. Read only, with one opt-in exception.
 
 It only sends the calls in ALLOWED_METHODS. These are standard Moonraker calls and
 they worked on one real U1 (Moonraker 1.4.1). Nothing here can send G-code, pause,
 heat or move. A test checks that.
+
+The one exception (owner approved, 2026-11-09): `camera.start_monitor` with exactly
+CAMERA_START_PARAMS, and only when the client was created with allow_camera_start=True.
+It turns on the printer's camera pictures for LAN viewers. It does not move, heat or
+pause anything. Verified on a real U1: pictures start within about 2 s. There is no
+stop call, so Guardian can never turn off somebody else's camera view.
 
 Behavior from spec section 5.2:
 - one persistent connection, reconnect with backoff (1 s up to 30 s)
@@ -30,6 +36,8 @@ from guardian.clock import Clock, SystemClock
 log = logging.getLogger(__name__)
 
 ALLOWED_METHODS = frozenset({"server.info", "printer.objects.list", "printer.objects.subscribe"})
+CAMERA_START = "camera.start_monitor"
+CAMERA_START_PARAMS = {"domain": "lan", "interval": 0}
 
 _ID_INFO, _ID_LIST, _ID_SUBSCRIBE = 1, 2, 3
 
@@ -44,6 +52,7 @@ class MoonrakerClient:
         *,
         backoff_start_s: float = 1.0,
         backoff_cap_s: float = 30.0,
+        allow_camera_start: bool = False,
     ) -> None:
         self.url = f"ws://{host}:{port}/websocket"
         self.bus = bus
@@ -54,15 +63,28 @@ class MoonrakerClient:
         self.connect_count = 0
         self.last_message_utc: datetime | None = None
         self.sent_methods: list[str] = []  # for tests and the audit trail
+        self.allow_camera_start = allow_camera_start
+        self._ws = None
+        self._next_id = 1000
 
     async def _send(self, ws, rpc_id: int, method: str, params: dict | None = None) -> None:
-        if method not in ALLOWED_METHODS:
+        camera_ok = self.allow_camera_start and method == CAMERA_START and params == CAMERA_START_PARAMS
+        if method not in ALLOWED_METHODS and not camera_ok:
             raise RuntimeError(f"refusing to send {method}: not on the read-only list")
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": rpc_id}
         if params is not None:
             msg["params"] = params
         self.sent_methods.append(method)
         await ws.send(json.dumps(msg))
+
+    async def start_camera_monitor(self) -> bool:
+        """Ask the printer to turn on its camera pictures (LAN). Returns False if not connected."""
+        ws = self._ws
+        if ws is None or not self.connected:
+            return False
+        self._next_id += 1
+        await self._send(ws, self._next_id, CAMERA_START, dict(CAMERA_START_PARAMS))
+        return True
 
     async def run(self, stop: asyncio.Event) -> None:
         """Run until `stop` is set. Never raises on network trouble."""
@@ -71,6 +93,7 @@ class MoonrakerClient:
             try:
                 async with websockets.connect(self.url, max_size=None, ping_interval=20) as ws:
                     self.connected = True
+                    self._ws = ws
                     self.connect_count += 1
                     backoff = self._backoff_start
                     await self.bus.publish("printer.connected", {"url": self.url, "n": self.connect_count})
@@ -81,6 +104,7 @@ class MoonrakerClient:
                 log.warning("printer connection problem: %r", exc)
             except Exception:  # noqa: BLE001 - never let the client die
                 log.exception("unexpected printer client error")
+            self._ws = None
             if self.connected:
                 self.connected = False
                 await self.bus.publish("printer.disconnected", {"url": self.url})

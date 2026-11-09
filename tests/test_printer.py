@@ -151,3 +151,60 @@ async def test_client_survives_server_down_then_up():
         stop.set()
         await task
         await late.stop()
+
+
+async def test_camera_start_is_refused_unless_allowed():
+    mock, rig = await make([[]])
+    try:
+        assert rig.client.allow_camera_start is False
+        with pytest.raises(RuntimeError):
+            await rig.client._send(None, 99, "camera.start_monitor", {"domain": "lan", "interval": 0})
+    finally:
+        await mock.stop()
+
+
+async def test_camera_start_only_with_exact_lan_params():
+    mock = MockMoonraker([[]])
+    await mock.start()
+    bus = EventBus()
+    client = MoonrakerClient("127.0.0.1", mock.port, bus, allow_camera_start=True,
+                             backoff_start_s=0.05, backoff_cap_s=0.2)
+    for method, params in [("camera.start_monitor", {"domain": "wan", "interval": 0}),
+                           ("camera.stop_monitor", {"domain": "lan"}),
+                           ("printer.gcode.script", {"script": "PAUSE"})]:
+        with pytest.raises(RuntimeError):
+            await client._send(None, 99, method, params)
+    assert await client.start_camera_monitor() is False  # not connected yet
+    stop = asyncio.Event()
+    task = asyncio.create_task(client.run(stop))
+    try:
+        async with asyncio.timeout(5):
+            while not client.connected:
+                await asyncio.sleep(0.02)
+            assert await client.start_camera_monitor() is True
+            while not mock.camera_starts:
+                await asyncio.sleep(0.02)
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+    assert mock.camera_starts == [{"domain": "lan", "interval": 0}]
+    assert mock.refused == []
+
+
+async def test_snapmaker_ai_exception_532_is_named():
+    """From the printer's defect_detection.py: id 532, code 1 = dirty bed, then it pauses."""
+    bus = EventBus()
+    tracker = StateTracker(bus)
+    reports = []
+
+    async def report(event_type, source, severity, key, metadata):
+        reports.append((event_type, source, severity))
+
+    Detector(bus, tracker, report)
+    await bus.publish("printer.message", {"method": "notify_exception_notification", "params": [
+        {"id": 532, "index": 0, "code": 1, "level": 2, "message": "detected dirty bed"}]})
+    await bus.publish("printer.message", {"method": "notify_exception_notification", "params": [
+        {"id": 532, "index": 0, "code": 2, "level": 2, "message": "detected noodle"}]})
+    assert reports == [("bed_not_clear", "snapmaker_ai", "critical"),
+                       ("spaghetti_detected", "snapmaker_ai", "critical")]

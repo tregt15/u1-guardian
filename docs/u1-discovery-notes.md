@@ -176,3 +176,41 @@ Camera, verified:
   `unisrv.log` did NOT show up as a `notify_camera_status_change` on the WebSocket. So the WebSocket does not report
   every gap. Guardian's own frame times are the only honest record.
 - No detection (noodle, spaghetti) messages were seen on the WebSocket in either print.
+
+
+## Starting the camera over the LAN (2026-11-09)
+
+Source of the idea: SimplyPrint's U1 webcam guide ("stock firmware + external keepalive") and the community project
+Dr-Hack-N-Sniff/Snapmaker-U1-Stock-Camera-Fluidd. Owner approved Guardian sending this one request.
+
+Verified on the real U1 (one test, sent from the PC over the Moonraker WebSocket on port 80, no token needed):
+
+- Request: `{"jsonrpc": "2.0", "id": 1, "method": "camera.start_monitor", "params": {"domain": "lan", "interval": 0}}`
+- About 2 s later: `notify_camera_status_change` `{monitor_domain: "lan", monitoring: true}`. No JSON-RPC reply to the
+  request itself came back on the WebSocket.
+- `monitor.jpg` changed 56 times in the next 60 s. `unisrv.log`: "Start camera monitor, domain is lan, interval is 0",
+  "New monitor state: lan is true, wan is false", then about 480 ms per picture (about 2 a second). The app's WAN
+  sessions took about 980 ms per picture.
+- `unisrv.log` showed no `Upload ... monitor.enc` line for the LAN session. Those lines appear only when a WAN (app)
+  session starts. The per-picture log line says "capturing image and uploading" in both modes, so "nothing leaves the
+  printer" is based on the log only. UNVERIFIED beyond that.
+- How long a LAN session lasts without renewal: still running after 5 minutes. Guardian renews on the countdown or
+  when pictures stop, so the exact limit does not matter much. Not measured yet.
+
+Other findings over SSH (read-only commands):
+
+- The 06:18 picture gap in print 2 was a crash of `unisrv`, not a normal session end. Its log stops at 06:18:24 and a
+  core dump exists: `/userdata/.coredump/unisrv_S0_PID1218_20261109T061836Z.core`. No WebSocket message was sent.
+- Logs live in `/oem/printer_data/logs/` (`unisrv.log`, `moonraker.log`, `klippy.log`, `gui.log`, `syslog`).
+- `unisrv.log` says a firmware update is downloaded and waiting ("has new: true, has downloaded: true").
+
+The printer's own build plate check (read from `/home/lava/klipper/klippy/extras/defect_detection.py`):
+
+- Settings come from `defect_detection` (on this printer: `main_enable` true, `clean_bed` enabled, sensitivity low,
+  `noodle` enabled, `residue` and `nozzle` off).
+- At print start (action code 136 `PRINT_BED_DETECTING`) Klipper asks `unisrv` for `camera.detect_capture` over the
+  printer's own MQTT (`camera/request`, `camera/response`) and runs the `bed_check` model. This takes its own picture,
+  so it works with the camera view off.
+- On a find it raises exception id 532, level 2, with code 1 "detected dirty bed", 2 "detected noodle",
+  3 "detected residue", 4 "detected dirty nozzle", and then pauses the print (`PAUSE`).
+- Read from source code only. A real 532 has not been seen yet.

@@ -2,8 +2,10 @@
 
 It answers the three read-only calls Guardian sends (server.info, printer.objects.list,
 printer.objects.subscribe) and then replays scripted messages, like a real printer would after
-a subscription. Any other method is refused and written to `refused`, so a test can prove
-Guardian never sends anything else.
+a subscription. It also accepts `camera.start_monitor` (the one opt-in write, kept in
+`camera_starts`) and answers it like the U1 does, with notify_camera_status_change.
+Any other method is refused and written to `refused`, so a test can prove Guardian never
+sends anything else.
 
 Run on its own to replay a JSONL file (one JSON message per line):
     python -m guardian.mock_moonraker tests/fixtures/u1_real_events.jsonl --port 7126
@@ -46,6 +48,7 @@ class MockMoonraker:
         self.connections = 0
         self.received_methods: list[str] = []
         self.refused: list[str] = []
+        self.camera_starts: list[Any] = []
         self._server = None
 
     async def start(self) -> None:
@@ -77,6 +80,11 @@ class MockMoonraker:
                     status = self.snapshots[n] if n < len(self.snapshots) else {
                         "print_stats": {"state": "standby", "filename": "", "exception": {}}}
                     result = {"eventtime": 1000.0, "status": status}
+                elif method == "camera.start_monitor":
+                    self.camera_starts.append(req.get("params"))
+                    await ws.send(json.dumps({"jsonrpc": "2.0", "method": "notify_camera_status_change",
+                                              "params": [{"monitor_domain": "lan", "monitoring": True}]}))
+                    continue
                 else:
                     self.refused.append(str(method))
                     await ws.send(json.dumps({"jsonrpc": "2.0", "id": rpc_id,

@@ -22,10 +22,29 @@ What exists so far (Milestone 0, no printer needed):
 - Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
   or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
 - Alert when the filament feeder reports an error (seen once on a real U1)
-- Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app has the camera view open (the printer's touchscreen is UNVERIFIED) (about 1 frame per second)
+- Camera on the U1: snapshot polling, about 1 to 2 pictures a second. Guardian turns the camera on by itself while a print runs
+  (`camera.keepalive`, see below). With that off, footage exists only while the Snapmaker app has the camera view open
+- Names the printer's own camera AI alerts (dirty build plate, spaghetti, residue, dirty nozzle). The printer pauses the print
+  itself. Guardian records it. Read from the printer's code, not yet seen on a real print (about 1 frame per second)
 
 What was seen on a real U1 is in `docs/u1-discovery-notes.md`. Anything not listed there, like Snapmaker's own
 spaghetti and bed alerts, is **unverified**. Guardian does not pretend to detect those.
+
+## The one thing Guardian sends to the printer
+
+Guardian only reads from the printer, with one exception you can turn off. To get camera pictures without the
+Snapmaker app open, it asks the printer to start its camera for the local network (`camera.start_monitor`, domain
+`lan`). That is the same request the app sends. It does not move, heat or pause anything, and Guardian never turns
+the camera off, so it cannot cut off the app. Each request is logged.
+
+Set `camera.keepalive` in your config:
+
+- `printing` (default): only while a print is running or paused. Idle printers are left alone.
+- `always`: also when idle.
+- `off`: never. Guardian is then fully read only.
+
+The printer's log showed no cloud upload for these local sessions (the app's own sessions do upload). That is
+based on the log only.
 
 ## Platforms
 
