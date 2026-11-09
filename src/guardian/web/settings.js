@@ -91,6 +91,8 @@ document.getElementById("save").addEventListener("click", async (ev) => {
     const r = await api("/api/settings", { method: "PUT", body: JSON.stringify({ changes: c }) });
     saved = r.values; render(true);
     say(r.changed.length ? "Saved: " + r.changed.join(", ") : "Nothing changed.", "info");
+    loadAi();
+    if (r.changed.includes("ai.enabled") && r.values["ai.enabled"] === true) afterAiTurnedOn();
   } catch (e) { say("Not saved: " + e.message, "bad"); dirty(); }
 });
 document.getElementById("reset").addEventListener("click", () => { render(true); say("", ""); });
@@ -103,12 +105,28 @@ async function loadAi() {
   try { r = await api("/api/ai/status"); }
   catch (e) { box.replaceChildren(el("p", { class: "muted" }, "Could not check the AI: " + e.message)); return; }
   const parts = [];
+  const inst = r.install || { plan: {}, state: {} };
+  const ist = inst.state || {};
+  if (ist.running || ist.error || (ist.done && !r.ollama_found)) {
+    parts.push(el("div", { class: "notice " + (ist.error ? "bad" : "info") },
+      ist.error ? "Installing Ollama did not work: " + ist.error : "Installing Ollama: " + (ist.step || "starting"),
+      ist.output && ist.output.length ? el("pre", { style: "white-space:pre-wrap;font-size:12px;margin:6px 0 0" }, ist.output.slice(-4).join("\n")) : null));
+    if (ist.running) setTimeout(loadAi, 2000);
+  }
   if (!r.ollama_found) {
-    parts.push(el("p", {}, "Ollama was not found at " + r.ollama_url + ". Ollama is a free program that runs AI models on your own computer. ",
-      "Nothing is sent to the internet. Install it from ", el("a", { href: r.install_help, target: "_blank", rel: "noopener" }, r.install_help),
-      ", start it, then reload this page."));
-    parts.push(el("p", { class: "muted" }, "On a Raspberry Pi the models are too big. Install Ollama on another computer and put its address in the Ollama address setting."));
+    parts.push(el("p", {}, "Ollama was not found at " + r.ollama_url + ". Ollama is a free program that runs AI models on your own computer. Nothing is sent to the internet."));
+    if (inst.plan.can_install && !ist.running) {
+      parts.push(el("p", {}, el("button", { type: "button", class: "primary", onclick: () => installOllama(false) }, "Install Ollama for me"),
+        " ", el("span", { class: "muted" }, inst.plan.manual || "")));
+    } else if (!inst.plan.can_install) {
+      parts.push(el("p", {}, inst.plan.manual || ""), el("p", {}, el("a", { href: r.install_help, target: "_blank", rel: "noopener" }, r.install_help)));
+    }
   } else {
+    if (ist.done && !r.model_ready && !offeredModel) {
+      offeredModel = true;
+      const label = r.models[r.model] || r.model;
+      setTimeout(() => download(r.model, label), 100);
+    }
     parts.push(el("p", {}, "Ollama " + r.ollama_version + " found at " + r.ollama_url + "."));
     const list = Object.entries(r.models).map(([name, label]) => {
       const size = r.installed[name] ?? r.installed[name + ":latest"];
@@ -132,6 +150,30 @@ async function loadAi() {
       !r.enabled ? "Turn on \"Use local AI\" above to use it." : "Download the chosen model to start using the AI."));
   }
   box.replaceChildren(...parts);
+}
+
+let offeredModel = false;
+
+async function installOllama(fromToggle) {
+  const ask = (fromToggle ? "Local AI needs Ollama, and it is not installed on this computer. " : "") +
+    "Install Ollama for you now? It is a free program from ollama.com. It is a large download (around 1 GB or more) " +
+    "and takes a few minutes. After that you pick an AI model to download.";
+  if (!confirm(ask)) return;
+  try { await api("/api/ai/install", { method: "POST" }); }
+  catch (e) { alert("Could not start the install: " + e.message); }
+  loadAi();
+}
+
+async function afterAiTurnedOn() {
+  let r;
+  try { r = await api("/api/ai/status"); } catch (e) { return; }
+  if (r.ollama_found) {
+    if (!r.model_ready) download(r.model, r.models[r.model] || r.model);
+    return;
+  }
+  const plan = (r.install || {}).plan || {};
+  if (plan.can_install) installOllama(true);
+  else alert("Local AI needs Ollama, and it is not installed. " + (plan.manual || "See https://ollama.com/download"));
 }
 
 async function download(name, label) {

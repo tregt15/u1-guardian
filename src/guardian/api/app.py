@@ -268,9 +268,28 @@ def create_app(ctx: ApiContext) -> FastAPI:
                 installed = await ai.ollama.models()
             except Exception:  # noqa: BLE001
                 installed = {}
+        inst = ctx.extra.get("installer")
         return {**ai.status(), "installed": installed,
                 "install_help": "https://ollama.com/download",
+                "install": {"plan": inst.plan(), "state": inst.state.as_dict()} if inst else None,
                 "models": {k: v for k, v in AI_MODELS.items()}}
+
+    @app.post("/api/ai/install", dependencies=[Depends(auth)])
+    async def ai_install() -> dict:
+        """Install Ollama for the user (they confirmed on the Settings page)."""
+        inst = ctx.extra.get("installer")
+        if inst is None:
+            raise HTTPException(409, "installing is not available in this mode")
+        if inst.state.running:
+            raise HTTPException(409, "an install is already running")
+        plan = inst.plan()
+        if not plan.get("can_install"):
+            raise HTTPException(409, plan.get("manual") or "Guardian cannot install Ollama here")
+        db.log("ai", "warning", "installing Ollama at the user's request", {"method": plan.get("method")})
+        task = asyncio.create_task(inst.install())
+        ctx.extra.setdefault("tasks", set()).add(task)
+        task.add_done_callback(lambda t: ctx.extra["tasks"].discard(t))
+        return {"started": True, "method": plan.get("method")}
 
     @app.post("/api/ai/download", dependencies=[Depends(auth)])
     async def ai_download(body: AiModelBody) -> dict:

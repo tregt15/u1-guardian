@@ -123,3 +123,22 @@ async def test_guardian_pauses_when_the_printer_does_not(tmp_path):
     assert row["event_type"] == "bed_not_clear" and row["severity"] == "critical"
     assert "autopause_armed" in kinds and "guardian_paused_print" in kinds
     assert app.autopause.status()["paused_count"] == 1
+
+
+def test_auto_camera_always_also_keeps_footage_when_idle(tmp_path):
+    """Bug seen 2026-11-09: keepalive 'always' turned the camera on while idle, but Guardian only read
+    pictures during prints, so the dashboard said no pictures came in."""
+    from guardian.config import CameraConfig
+
+    cfg = sim.make_config(tmp_path)
+    cam = cfg.camera.model_dump()
+    cam.update(snapshot_url="http://127.0.0.1:9/monitor.jpg", keepalive="printing")
+    cfg = cfg.model_copy(update={"camera": CameraConfig(**cam)})
+    app = App(cfg, printer_port=9)
+    try:
+        app.tracker.status = {"print_stats": {"state": "complete"}}
+        assert app._buffer_wanted() is False
+        app.cfg.camera.keepalive = "always"
+        assert app._buffer_wanted() is True
+    finally:
+        app.db.close()

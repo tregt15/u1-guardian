@@ -21,6 +21,7 @@ import httpx
 import uvicorn
 
 from guardian.ai.diagnosis import Diagnoser
+from guardian.ai.installer import OllamaInstaller
 from guardian.ai.vision import AiService, VisionWatcher
 from guardian.api.app import ApiContext, create_app
 from guardian.blackbox.incident_manager import IncidentManager
@@ -118,12 +119,14 @@ class App:
         if cfg.notifications.email.enabled:
             channels.append(ResendEmailChannel(cfg.notifications.email))
         self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock)
+        self.ollama_installer = OllamaInstaller(lambda: self.ai.ollama.version())
         self.diagnoser = Diagnoser(cfg, self.db, self.ai, self.clock, self.ffmpeg,
                                    notify=self.notifier.send_diagnosis)
         self.api = create_app(ApiContext(cfg=cfg, db=self.db, bus=self.bus, status_fn=self.status,
                                          trigger_fn=self._report, started_utc=self.started_utc,
                                          notifier=self.notifier, settings_fn=self.apply_settings,
-                                         extra={"ai": self.ai, "fresh_frame": self._fresh_frame,
+                                         extra={"ai": self.ai, "installer": self.ollama_installer,
+                                                "fresh_frame": self._fresh_frame,
                                                 "selftest": self.run_selftest}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
@@ -234,6 +237,10 @@ class App:
         """buffer_mode: `printing` buffers while a print is heating, running or paused (spec 6.1).
         Until the first printer snapshot arrives, keep buffering."""
         if self.cfg.blackbox.buffer_mode == "always":
+            return True
+        # Auto camera "always" keeps the U1 camera on while idle, so keep the pictures too.
+        # (Before this, the camera was on but Guardian did not read it, and the dashboard said no pictures came.)
+        if self.snapshot_mode and self.cfg.camera.keepalive == "always":
             return True
         state = self.tracker.print_state
         return state is None or state in ("printing", "paused")

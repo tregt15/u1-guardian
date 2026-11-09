@@ -72,8 +72,10 @@ Guardian has no camera AI of its own. "Build plate not clear" and the other came
 ## Local AI (optional)
 
 Guardian can use a local AI model to look at the camera and to explain incidents. It is off until you turn it on.
-Nothing is sent to the internet. It runs with [Ollama](https://ollama.com/download), a free program you install
-yourself (like FFmpeg). Then pick and download a model on the Settings page:
+Nothing is sent to the internet. It runs with [Ollama](https://ollama.com/download), a free program (like FFmpeg).
+When you turn on local AI and Ollama is missing, the Settings page offers to install it for you. On Windows Guardian
+does that with winget (Microsoft's package manager). On Linux it shows the one command to run, because Ollama's
+installer needs your password. Then pick and download a model on the Settings page:
 
 - Qwen2.5-VL 7B: about 6 GB, better
 - Gemma 3 4B: about 3.3 GB, faster
