@@ -181,10 +181,26 @@ class ApiConfig(_Section):
         return self
 
 
+class ToolchangerConfig(_Section):
+    """Tool change monitoring (spec 5.3). Read only: Guardian only watches the changes."""
+
+    enabled: bool = True
+    # A fixed timeout in seconds. Empty means learn it from normal changes.
+    timeout_s: float | None = Field(default=None, gt=0)
+    # Learned timeout = max(floor, p99 of recent good changes x margin). Real U1 changes took
+    # 3 to 5 s (399 changes, one print), so the floor is about 3 times the slowest one.
+    timeout_floor_s: float = Field(default=15.0, gt=0)
+    timeout_margin: float = Field(default=1.5, ge=1.0)
+    learn_count: int = Field(default=20, ge=1)  # good changes needed before learning
+    # After a change ends, how long the tool states may take to settle before they count as wrong.
+    settle_s: float = Field(default=3.0, gt=0)
+
+
 class Config(_Section):
     printer: PrinterConfig = PrinterConfig()
     camera: CameraConfig = CameraConfig()
     blackbox: BlackboxConfig = BlackboxConfig()
+    toolchanger: ToolchangerConfig = ToolchangerConfig()
     storage: StorageConfig = StorageConfig()
     api: ApiConfig = ApiConfig()
     notifications: NotificationsConfig = NotificationsConfig()

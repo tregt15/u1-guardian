@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS toolchange_records (
     started_utc    TEXT NOT NULL,
     ended_utc      TEXT,
     duration_ms    INTEGER,
-    result         TEXT,       -- ok | timeout | wrong_tool | error | interrupted
+    result         TEXT,       -- ok | park_only | timeout | wrong_tool | bad_state | error | interrupted
     transitions    TEXT,       -- JSON list of {state, ts}
     error          TEXT,
     incident_id    INTEGER REFERENCES incidents(id)

@@ -269,10 +269,19 @@ def create_app(ctx: ApiContext) -> FastAPI:
         return {"deleted": uid}
 
     @app.get("/api/toolchanges", dependencies=[Depends(auth)])
-    async def toolchanges(limit: int = Query(100, ge=1, le=500)) -> dict:
-        rows = db.list_toolchanges(limit)
-        return {"toolchanges": [dict(r) for r in rows],
-                "note": "Tool change recording is not built yet." if not rows else None}
+    async def toolchanges(limit: int = Query(100, ge=1, le=500), problems: bool = False) -> dict:
+        out = []
+        for r in db.list_toolchanges(limit, problems_only=problems):
+            item = dict(r)
+            try:
+                item["transitions"] = json.loads(item["transitions"]) if item["transitions"] else []
+            except ValueError:
+                pass
+            if item.get("incident_id"):
+                inc = db.get_incident(item["incident_id"])
+                item["incident_uid"] = inc["uid"] if inc else None
+            out.append(item)
+        return {"toolchanges": out, "counts": db.toolchange_stats()}
 
     @app.post("/api/notifications/test", dependencies=[Depends(auth)])
     async def notifications_test(body: TestBody) -> dict:

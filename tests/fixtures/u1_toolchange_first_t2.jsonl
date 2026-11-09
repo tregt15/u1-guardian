@@ -1,0 +1,15 @@
+{"t_utc":"2026-11-09T03:10:46.920Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":105.0}},23628.10280885]}}
+{"t_utc":"2026-11-09T03:10:49.539Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder2"]}}
+{"t_utc":"2026-11-09T03:10:49.556Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-09T03:10:49.676Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"activating_move":true}},23630.859518809]}}
+{"t_utc":"2026-11-09T03:10:50.929Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},23632.111761351]}}
+{"t_utc":"2026-11-09T03:10:51.014Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder2 !!!"]}}
+{"t_utc":"2026-11-09T03:10:52.184Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"UNKNOWN","active_pin":true}},23633.364265519]}}
+{"t_utc":"2026-11-09T03:10:52.431Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"PARKED","active_pin":false}},23633.615170019]}}
+{"t_utc":"2026-11-09T03:10:52.682Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"ACTIVATE","park_pin":false,"active_pin":true,"grab_valid_pin":true}},23633.865849061]}}
+{"t_utc":"2026-11-09T03:10:53.391Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder2"]}}
+{"t_utc":"2026-11-09T03:10:53.394Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code PRINT_PREEXTRUDING"]}}
+{"t_utc":"2026-11-09T03:10:53.436Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":134},"toolhead":{"extruder":"extruder2"},"extruder2":{"activating_move":false,"switch_count":6}},23634.617842436]}}
+{"t_utc":"2026-11-09T03:10:54.013Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:79.7 /80.0 C:42.7 /0.0 T0:242.5 /255.0 T1:242.8 /105.0 T2:254.9 /255.0 T3:37.4 /0.0"]}}
+{"t_utc":"2026-11-09T03:11:07.420Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-09T03:11:07.484Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":0}},23648.665079318]}}

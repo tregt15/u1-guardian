@@ -1,0 +1,14 @@
+{"t_utc":"2026-11-09T07:22:57.016Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder"]}}
+{"t_utc":"2026-11-09T07:22:57.019Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-09T07:22:57.106Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"activating_move":true}},38757.12156998]}}
+{"t_utc":"2026-11-09T07:22:58.358Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","park_pin":true}},38758.376175023]}}
+{"t_utc":"2026-11-09T07:22:58.610Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","active_pin":false,"grab_valid_pin":false}},38758.626840356]}}
+{"t_utc":"2026-11-09T07:22:58.857Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"activating_move":false}},38758.877024148]}}
+{"t_utc":"2026-11-09T07:23:01.916Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// [purifier] purifier not exist!"]}}
+{"t_utc":"2026-11-09T07:23:02.115Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":0.0},"extruder1":{"target":0.0},"extruder2":{"target":0.0}},38762.133768899]}}
+{"t_utc":"2026-11-09T07:23:02.356Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// idle_timeout: Timeout set to 300.00 s"]}}
+{"t_utc":"2026-11-09T07:23:02.365Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// [timelapse] not started!"]}}
+{"t_utc":"2026-11-09T07:23:02.435Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["Done printing file"]}}
+{"t_utc":"2026-11-09T07:23:02.629Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"state":"complete"}},38762.649633608]}}
+{"t_utc":"2026-11-09T07:23:03.170Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Exited to idle state"]}}
+{"t_utc":"2026-11-09T07:23:03.381Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"main_state":0}},38763.401619692]}}

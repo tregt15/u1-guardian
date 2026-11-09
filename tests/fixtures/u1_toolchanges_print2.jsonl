@@ -1,0 +1,49 @@
+{"t_utc":"2026-11-09T01:58:26.124Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":105.0}},19287.203884571]}}
+{"t_utc":"2026-11-09T01:58:28.671Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder -> extruder1"]}}
+{"t_utc":"2026-11-09T01:58:28.672Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder !!!"]}}
+{"t_utc":"2026-11-09T01:58:28.881Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"activating_move":true}},19289.960945989]}}
+{"t_utc":"2026-11-09T01:58:30.135Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},19291.214480907]}}
+{"t_utc":"2026-11-09T01:58:30.249Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder1 !!!"]}}
+{"t_utc":"2026-11-09T01:58:31.396Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","active_pin":true}},19292.467110199]}}
+{"t_utc":"2026-11-09T01:58:31.887Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"ACTIVATE","park_pin":false}},19292.967895449]}}
+{"t_utc":"2026-11-09T01:58:32.138Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":true}},19293.218603658]}}
+{"t_utc":"2026-11-09T01:58:32.639Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder1"]}}
+{"t_utc":"2026-11-09T01:58:32.689Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder1"},"extruder1":{"activating_move":false,"switch_count":8}},19293.765140033]}}
+{"t_utc":"2026-11-09T01:59:20.895Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"info":{"total_layer":501,"current_layer":3}}},19341.968942264]}}
+{"t_utc":"2026-11-09T01:59:22.894Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":255.0}},19343.973351723]}}
+{"t_utc":"2026-11-09T01:59:47.729Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":105.0}},19368.800240944]}}
+{"t_utc":"2026-11-09T01:59:50.229Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder"]}}
+{"t_utc":"2026-11-09T01:59:50.229Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-09T01:59:50.300Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"activating_move":true}},19371.379986528]}}
+{"t_utc":"2026-11-09T01:59:51.559Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","park_pin":true,"active_pin":false}},19372.633133529]}}
+{"t_utc":"2026-11-09T01:59:51.730Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder !!!"]}}
+{"t_utc":"2026-11-09T01:59:51.810Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":false}},19372.883503404]}}
+{"t_utc":"2026-11-09T01:59:52.804Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"UNKNOWN","active_pin":true,"grab_valid_pin":true}},19373.885992654]}}
+{"t_utc":"2026-11-09T01:59:53.304Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"ACTIVATE","park_pin":false}},19374.38683478]}}
+{"t_utc":"2026-11-09T01:59:54.086Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder"]}}
+{"t_utc":"2026-11-09T01:59:54.307Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder"},"extruder":{"activating_move":false,"switch_count":8}},19375.388325655]}}
+{"t_utc":"2026-11-09T02:00:11.144Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":255.0}},19392.207156538]}}
+{"t_utc":"2026-11-09T02:00:24.916Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"info":{"total_layer":501,"current_layer":4}}},19405.995672253]}}
+{"t_utc":"2026-11-09T02:00:35.510Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":105.0}},19416.555696091]}}
+{"t_utc":"2026-11-09T02:00:38.165Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder -> extruder1"]}}
+{"t_utc":"2026-11-09T02:00:38.168Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder !!!"]}}
+{"t_utc":"2026-11-09T02:00:38.252Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"activating_move":true}},19419.330152218]}}
+{"t_utc":"2026-11-09T02:00:39.753Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},19420.833156052]}}
+{"t_utc":"2026-11-09T02:00:39.756Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder1 !!!"]}}
+{"t_utc":"2026-11-09T02:00:40.754Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","active_pin":true}},19421.835228802]}}
+{"t_utc":"2026-11-09T02:00:41.253Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"ACTIVATE","park_pin":false}},19422.335800552]}}
+{"t_utc":"2026-11-09T02:00:41.511Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":true}},19422.586240136]}}
+{"t_utc":"2026-11-09T02:00:42.133Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder1"]}}
+{"t_utc":"2026-11-09T02:00:42.260Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder1"},"extruder1":{"activating_move":false,"switch_count":9}},19423.338727011]}}
+{"t_utc":"2026-11-09T02:01:26.989Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"info":{"total_layer":501,"current_layer":5}}},19468.069898074]}}
+{"t_utc":"2026-11-09T02:01:29.501Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":255.0}},19470.582339242]}}
+{"t_utc":"2026-11-09T02:01:53.883Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":105.0}},19494.957234962]}}
+{"t_utc":"2026-11-09T02:01:56.612Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder"]}}
+{"t_utc":"2026-11-09T02:01:56.618Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-09T02:01:56.658Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"activating_move":true}},19497.713701088]}}
+{"t_utc":"2026-11-09T02:01:57.887Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},19498.967245631]}}
+{"t_utc":"2026-11-09T02:01:58.028Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder !!!"]}}
+{"t_utc":"2026-11-09T02:01:59.135Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"UNKNOWN","active_pin":true,"grab_valid_pin":true}},19500.220196048]}}
+{"t_utc":"2026-11-09T02:01:59.637Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"ACTIVATE","park_pin":false}},19500.721294548]}}
+{"t_utc":"2026-11-09T02:02:00.464Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder"]}}
+{"t_utc":"2026-11-09T02:02:00.641Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder"},"extruder":{"activating_move":false,"switch_count":9}},19501.723613465]}}

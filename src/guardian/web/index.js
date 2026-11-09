@@ -24,6 +24,14 @@ async function refreshStatus() {
       ["Last new frame", c.last_frame_utc ? ago(c.last_frame_utc) : "none yet"],
       ["Footage now", c.mode === "snapshot" ? (viewing ? badge("being saved", "ok") : badge("not available", "warn")) : "n/a"],
           ]);
+    const t = s.toolchanger || {};
+    const timeoutWhy = { learned: "learned from your printer", fixed: "set in config", default: "default until " + t.learn_count + " good changes are measured" };
+    fill(document.getElementById("tools"), t.enabled === false ? [["Watching", badge("off", "warn")]] : [
+      ["Watching", badge("on", "ok")],
+      ["Now", (t.in_progress || []).length ? "changing " + t.in_progress.join(", ") : "no change in progress"],
+      ["Typical time", t.median_ms != null ? (t.median_ms / 1000).toFixed(1) + " s" : "not measured yet"],
+      ["Counts as stuck after", t.timeout_s != null ? t.timeout_s + " s (" + (timeoutWhy[t.timeout_source] || t.timeout_source) + ")" : "unknown"],
+    ]);
     fill(document.getElementById("guardian"), [
       ["Version", g.version],
       ["Open incidents", String((s.incidents || {}).open ?? 0)],
@@ -111,6 +119,26 @@ document.getElementById("email-test").addEventListener("click", async (ev) => {
   ev.target.disabled = false; loadEmailLog();
 });
 
-refreshStatus(); loadIncidents(true); loadEmailLog();
+const TOOL_RESULT = { timeout: "did not finish in time", wrong_tool: "wrong tool", bad_state: "tool states looked wrong",
+  error: "printer error", interrupted: "interrupted" };
+async function loadToolProblems() {
+  try {
+    const r = await api("/api/toolchanges?problems=true&limit=5");
+    const c = r.counts || {};
+    const good = c.ok || 0, bad = Object.entries(c).filter(([k]) => !["ok", "open", "park_only"].includes(k)).reduce((a, [, n]) => a + n, 0);
+    const head = el("li", { style: "list-style:none;margin-left:-18px" }, good + " good, " + bad + " with problems (all time).");
+    const items = r.toolchanges.map(tc => {
+      const label = toolLabel(tc.previous_tool) + " -> " + toolLabel(tc.requested_tool);
+      const text = shortTime(tc.started_utc) + " " + label + ": " + (TOOL_RESULT[tc.result] || tc.result);
+      return el("li", {}, tc.incident_uid ? el("a", { href: "/incident?uid=" + encodeURIComponent(tc.incident_uid) }, text) : text,
+        tc.error ? el("div", {}, tc.error) : null);
+    });
+    document.getElementById("tool-problems").replaceChildren(head, ...items);
+  } catch (e) { /* optional */ }
+}
+function toolLabel(n) { return !n ? "?" : n === "extruder" ? "T0" : /^extruder\d+$/.test(n) ? "T" + n.slice(8) : n; }
+
+refreshStatus(); loadIncidents(true); loadEmailLog(); loadToolProblems();
+setInterval(loadToolProblems, 30000);
 setInterval(refreshStatus, 5000);
-listen(() => loadIncidents(true));
+listen(() => { loadIncidents(true); loadToolProblems(); });

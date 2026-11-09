@@ -30,6 +30,7 @@ class Detector:
         self.tracker = tracker
         self.report = report
         self._prev_state: str | None = None
+        self._feed_errors: dict[tuple[str, str], Any] = {}
         bus.subscribe("printer.snapshot", self._on_snapshot)
         bus.subscribe("printer.message", self._on_message)
 
@@ -39,6 +40,7 @@ class Detector:
         # The tracker (subscribed first) has already merged the snapshot.
         # If the state changed during a connection gap, treat it like a normal change.
         await self._check_print_state()
+        await self._check_filament_feed(payload.get("status", {}), from_snapshot=True)
 
     async def _on_message(self, topic: str, payload: dict) -> None:
         method, params = payload.get("method"), payload.get("params")
@@ -58,6 +60,8 @@ class Detector:
             await self._fire(method.removeprefix("notify_"), "klipper", "critical", None, {})
         elif method == "notify_status_update":
             await self._check_print_state()
+            if params and isinstance(params[0], dict):
+                await self._check_filament_feed(params[0], from_snapshot=False)
 
     # ---- rules ----
 
@@ -92,6 +96,31 @@ class Detector:
         elif state == "cancelled" and prev in ("printing", "paused"):
             # UNVERIFIED on the U1: the exact state names. Standard Moonraker names used.
             await self._fire("print_cancelled", "moonraker", "warning", "cancelled", {})
+
+    async def _check_filament_feed(self, status: dict, from_snapshot: bool) -> None:
+        """Seen on a real U1 (print 1): `filament_feed right` -> `extruder2` -> `channel_error` went from
+        "ok" to "wheel_speed" one second before the print paused with exception 525. Only the value
+        "ok" is known to mean no error. Other error names are UNVERIFIED but reported as they are."""
+        for name, feeder in status.items():
+            if not (isinstance(name, str) and name.startswith("filament_feed ") and isinstance(feeder, dict)):
+                continue
+            for channel, info in feeder.items():
+                if not (isinstance(info, dict) and "channel_error" in info):
+                    continue
+                err = info.get("channel_error")
+                key = (name, channel)
+                known = key in self._feed_errors
+                prev = self._feed_errors.get(key)
+                self._feed_errors[key] = err
+                # A snapshot is a baseline the first time. Updates only arrive when something changed.
+                if err in (None, "ok") or err == prev or (from_snapshot and not known):
+                    continue
+                tool = "T0" if channel == "extruder0" else ("T" + channel.removeprefix("extruder"))
+                await self._fire("filament_feed_error", "moonraker", "warning", f"{name}.{channel}:{err}", {
+                    "feeder": name, "channel": channel, "tool": tool, "error": err,
+                    "channel_state": info.get("channel_state"),
+                    "summary": f"Filament feed for {tool} reports error '{err}' (step: {info.get('channel_state')}).",
+                })
 
     async def _fire(self, event_type: str, source: str, severity: str, key: str | None,
                     extra: dict) -> None:

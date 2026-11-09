@@ -132,10 +132,60 @@ class Database:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM incidents WHERE id = ?", (incident_id,))
 
-    def list_toolchanges(self, limit: int = 100) -> list[sqlite3.Row]:
+    def list_toolchanges(self, limit: int = 100, problems_only: bool = False) -> list[sqlite3.Row]:
+        where = " WHERE result IS NOT NULL AND result NOT IN ('ok', 'park_only')" if problems_only else ""
         with self._lock:
             return self._conn.execute(
-                "SELECT * FROM toolchange_records ORDER BY started_utc DESC LIMIT ?", (limit,)).fetchall()
+                f"SELECT * FROM toolchange_records{where} ORDER BY started_utc DESC, id DESC LIMIT ?",
+                (limit,)).fetchall()
+
+    _TOOLCHANGE_FIELDS = frozenset({
+        "print_filename", "requested_tool", "previous_tool", "actual_tool", "started_utc", "ended_utc",
+        "duration_ms", "result", "transitions", "error", "incident_id"})
+
+    def create_toolchange(self, **fields: Any) -> int:
+        bad = set(fields) - self._TOOLCHANGE_FIELDS
+        if bad:
+            raise ValueError(f"unknown toolchange fields: {sorted(bad)}")
+        cols = sorted(fields)
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                f"INSERT INTO toolchange_records ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                [fields[c] for c in cols])
+            return int(cur.lastrowid)
+
+    def update_toolchange(self, record_id: int, **fields: Any) -> None:
+        bad = set(fields) - self._TOOLCHANGE_FIELDS
+        if bad:
+            raise ValueError(f"unknown toolchange fields: {sorted(bad)}")
+        if not fields:
+            return
+        cols = sorted(fields)
+        with self._lock, self._conn:
+            self._conn.execute(
+                f"UPDATE toolchange_records SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
+                [*(fields[c] for c in cols), record_id])
+
+    def recent_ok_toolchange_ms(self, limit: int = 200) -> list[int]:
+        """Durations of the most recent good tool changes, newest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT duration_ms FROM toolchange_records WHERE result = 'ok' AND duration_ms IS NOT NULL"
+                " ORDER BY started_utc DESC, id DESC LIMIT ?", (limit,)).fetchall()
+        return [int(r["duration_ms"]) for r in rows]
+
+    def toolchange_stats(self) -> dict[str, Any]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT result, COUNT(*) AS n FROM toolchange_records GROUP BY result").fetchall()
+        return {(r["result"] or "open"): int(r["n"]) for r in rows}
+
+    def close_open_toolchanges(self, result: str, error: str) -> int:
+        """Mark records that never got a result (Guardian stopped mid change)."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "UPDATE toolchange_records SET result = ?, error = ? WHERE result IS NULL", (result, error))
+            return cur.rowcount
 
     # ---- incident events ----
 

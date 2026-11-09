@@ -217,10 +217,18 @@ def test_cannot_delete_while_recording(tmp_path):
     assert env.client.delete(f"/api/incidents/{uid}?confirm=true").status_code == 409
 
 
-def test_toolchanges_empty_is_honest(tmp_path):
+def test_toolchanges_list_and_problem_filter(tmp_path):
     env = make_env(tmp_path)
+    assert env.client.get("/api/toolchanges").json()["toolchanges"] == []
+    env.db.create_toolchange(requested_tool="extruder1", previous_tool="extruder", started_utc="2026-11-09T01:00:00.000Z",
+                             result="ok", duration_ms=4000, transitions='[{"what": "start"}]')
+    env.db.create_toolchange(requested_tool="extruder", previous_tool="extruder1", started_utc="2026-11-09T01:01:00.000Z",
+                             result="timeout", error="stuck")
     body = env.client.get("/api/toolchanges").json()
-    assert body["toolchanges"] == [] and "not built" in body["note"]
+    assert len(body["toolchanges"]) == 2 and body["counts"] == {"ok": 1, "timeout": 1}
+    assert body["toolchanges"][1]["transitions"] == [{"what": "start"}]
+    problems = env.client.get("/api/toolchanges?problems=true").json()["toolchanges"]
+    assert [p["result"] for p in problems] == ["timeout"]
 
 
 def test_dashboard_pages_are_served(tmp_path):

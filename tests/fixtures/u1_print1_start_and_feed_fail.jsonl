@@ -1,0 +1,188 @@
+{"t_utc":"2026-11-08T22:12:08.243Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["File opened:sheep10_test.gcode Size:34371461"]}}
+{"t_utc":"2026-11-08T22:12:08.245Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["File selected"]}}
+{"t_utc":"2026-11-08T22:12:08.257Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING"]}}
+{"t_utc":"2026-11-08T22:12:08.335Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// [timelapse] cannot start, not enabled!"]}}
+{"t_utc":"2026-11-08T22:12:08.341Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// [purifier] purifier not exist!"]}}
+{"t_utc":"2026-11-08T22:12:08.465Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"filename":"sheep10_test.gcode","state":"printing","info":{"total_layer":501,"current_layer":0}},"machine_state_manager":{"main_state":1},"extruder1":{"target":140.0}},5709.21877793]}}
+{"t_utc":"2026-11-08T22:12:11.333Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Run Current: 0.65A Hold Current: 0.65A"]}}
+{"t_utc":"2026-11-08T22:12:11.564Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Run Current: 0.65A Hold Current: 0.65A"]}}
+{"t_utc":"2026-11-08T22:12:20.007Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// trigger_mcu_pos: {'stepper_y': -2367, 'stepper_x': -3905}"]}}
+{"t_utc":"2026-11-08T22:12:29.262Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// trigger_mcu_pos: {'stepper_x': -49474, 'stepper_y': -51134}"]}}
+{"t_utc":"2026-11-08T22:12:30.074Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// probe_start_x: 5.20000, probe_start_y: 4.80156"]}}
+{"t_utc":"2026-11-08T22:12:30.074Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// use_origin: True, f_cal: True, origin: [12.305555555555555, 0.4444444444444444]"]}}
+{"t_utc":"2026-11-08T22:12:34.592Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// 5.20000, 4.80156, 4.80000, 4.80000, [[-3008.0, -3008.0], [3264.0, 3264.0]], 12.25000, 0.50000, 12, 0"]}}
+{"t_utc":"2026-11-08T22:12:34.873Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Run Current: 1.20A Hold Current: 1.20A"]}}
+{"t_utc":"2026-11-08T22:12:35.128Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Run Current: 1.20A Hold Current: 1.20A"]}}
+{"t_utc":"2026-11-08T22:12:36.812Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder -> extruder1"]}}
+{"t_utc":"2026-11-08T22:12:36.815Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder !!!"]}}
+{"t_utc":"2026-11-08T22:12:37.023Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"activating_move":true}},5737.782636694]}}
+{"t_utc":"2026-11-08T22:12:38.526Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"PARKED","park_pin":true,"active_pin":false}},5739.285362861]}}
+{"t_utc":"2026-11-08T22:12:38.788Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:12:38.801Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"grab_valid_pin":false}},5739.558742903]}}
+{"t_utc":"2026-11-08T22:12:39.802Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","active_pin":true}},5740.560008612]}}
+{"t_utc":"2026-11-08T22:12:40.309Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"ACTIVATE","park_pin":false}},5741.06092307]}}
+{"t_utc":"2026-11-08T22:12:40.553Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":true}},5741.311830487]}}
+{"t_utc":"2026-11-08T22:12:41.146Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder1"]}}
+{"t_utc":"2026-11-08T22:12:41.146Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING with action PRINT_BED_DETECTING"]}}
+{"t_utc":"2026-11-08T22:12:41.320Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":136},"toolhead":{"extruder":"extruder1"},"extruder1":{"activating_move":false,"switch_count":4}},5742.063759112]}}
+{"t_utc":"2026-11-08T22:12:45.124Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// sample 1, discard 0"]}}
+{"t_utc":"2026-11-08T22:12:51.402Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// probe at x: 5.320, y: 4.948 is z=249.750000"]}}
+{"t_utc":"2026-11-08T22:12:51.404Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Result is z=249.750000"]}}
+{"t_utc":"2026-11-08T22:12:51.809Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// sample 1, discard 0"]}}
+{"t_utc":"2026-11-08T22:12:53.535Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// probe at x: 5.320, y: 4.948 is z=249.748333"]}}
+{"t_utc":"2026-11-08T22:12:53.542Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Result is z=249.748333"]}}
+{"t_utc":"2026-11-08T22:13:00.739Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Changed main state to PRINTING with action IDLE"]}}
+{"t_utc":"2026-11-08T22:13:00.761Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code PRINT_SWITCH_CHECKING"]}}
+{"t_utc":"2026-11-08T22:13:00.764Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder"]}}
+{"t_utc":"2026-11-08T22:13:00.765Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:13:00.894Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":132},"extruder":{"activating_move":true}},5761.63648683]}}
+{"t_utc":"2026-11-08T22:13:02.632Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},5763.390618289]}}
+{"t_utc":"2026-11-08T22:13:02.808Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder !!!"]}}
+{"t_utc":"2026-11-08T22:13:03.884Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"UNKNOWN","active_pin":true,"grab_valid_pin":true}},5764.643609832]}}
+{"t_utc":"2026-11-08T22:13:04.404Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"ACTIVATE","park_pin":false}},5765.145019832]}}
+{"t_utc":"2026-11-08T22:13:05.169Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder"]}}
+{"t_utc":"2026-11-08T22:13:05.169Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder -> extruder1"]}}
+{"t_utc":"2026-11-08T22:13:05.171Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder !!!"]}}
+{"t_utc":"2026-11-08T22:13:05.387Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder"},"extruder":{"activating_move":false,"switch_count":5},"extruder1":{"activating_move":true}},5766.146918166]}}
+{"t_utc":"2026-11-08T22:13:06.196Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"PARKED","park_pin":true,"active_pin":false}},5766.898975999]}}
+{"t_utc":"2026-11-08T22:13:06.321Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:13:06.390Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"grab_valid_pin":false}},5767.149250499]}}
+{"t_utc":"2026-11-08T22:13:07.407Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","active_pin":true}},5768.151452167]}}
+{"t_utc":"2026-11-08T22:13:07.892Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"ACTIVATE","park_pin":false}},5768.652429625]}}
+{"t_utc":"2026-11-08T22:13:08.148Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":true}},5768.903375542]}}
+{"t_utc":"2026-11-08T22:13:08.705Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder1"]}}
+{"t_utc":"2026-11-08T22:13:08.706Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder2"]}}
+{"t_utc":"2026-11-08T22:13:08.708Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:13:08.896Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"toolhead":{"extruder":"extruder1"},"extruder1":{"activating_move":false,"switch_count":5},"extruder2":{"activating_move":true}},5769.655718917]}}
+{"t_utc":"2026-11-08T22:13:09.648Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","park_pin":true}},5770.406286043]}}
+{"t_utc":"2026-11-08T22:13:09.903Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder2 !!!"]}}
+{"t_utc":"2026-11-08T22:13:09.928Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","active_pin":false,"grab_valid_pin":false}},5770.687100084]}}
+{"t_utc":"2026-11-08T22:13:10.940Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"UNKNOWN","active_pin":true}},5771.68920696]}}
+{"t_utc":"2026-11-08T22:13:11.452Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"ACTIVATE","park_pin":false}},5772.190304585]}}
+{"t_utc":"2026-11-08T22:13:11.680Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"grab_valid_pin":true}},5772.441218419]}}
+{"t_utc":"2026-11-08T22:13:12.241Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder2"]}}
+{"t_utc":"2026-11-08T22:13:12.241Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-08T22:13:12.284Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code PRINT_AUTO_FEEDING"]}}
+{"t_utc":"2026-11-08T22:13:12.443Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":133},"toolhead":{"extruder":"extruder2"},"extruder2":{"activating_move":false,"switch_count":4}},5773.192568086]}}
+{"t_utc":"2026-11-08T22:13:12.587Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder2 -> extruder"]}}
+{"t_utc":"2026-11-08T22:13:12.589Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder2 !!!"]}}
+{"t_utc":"2026-11-08T22:13:12.683Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_picking","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_picking"}},"extruder":{"activating_move":true}},5773.443015836]}}
+{"t_utc":"2026-11-08T22:13:13.692Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},5774.445696128]}}
+{"t_utc":"2026-11-08T22:13:13.752Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder !!!"]}}
+{"t_utc":"2026-11-08T22:13:14.940Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"UNKNOWN","active_pin":true,"grab_valid_pin":true}},5775.699409545]}}
+{"t_utc":"2026-11-08T22:13:15.445Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"ACTIVATE","park_pin":false}},5776.200257795]}}
+{"t_utc":"2026-11-08T22:13:16.239Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder"]}}
+{"t_utc":"2026-11-08T22:13:16.467Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_feeding","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_feeding"}},"toolhead":{"extruder":"extruder"},"extruder":{"activating_move":false,"switch_count":6}},5777.212505338]}}
+{"t_utc":"2026-11-08T22:13:22.468Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":270.0}},5783.22622284]}}
+{"t_utc":"2026-11-08T22:13:24.971Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:46.8 /80.0 C:26.5 /0.0 T0:37.7 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:25.024Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_heating","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_heating"}}},5785.767559425]}}
+{"t_utc":"2026-11-08T22:13:25.987Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:47.1 /80.0 C:25.1 /0.0 T0:46.8 /270.0 T1:139.9 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:26.983Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:47.5 /80.0 C:27.4 /0.0 T0:59.8 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:27.973Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:47.7 /80.0 C:25.0 /0.0 T0:69.7 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:28.972Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:48.1 /80.0 C:27.7 /0.0 T0:79.5 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:29.979Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:48.3 /80.0 C:25.7 /0.0 T0:92.5 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:30.974Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:48.6 /80.0 C:26.5 /0.0 T0:102.0 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:31.980Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:48.9 /80.0 C:27.2 /0.0 T0:111.2 /270.0 T1:139.9 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:32.976Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:49.4 /80.0 C:26.7 /0.0 T0:123.0 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:33.979Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:49.9 /80.0 C:27.7 /0.0 T0:131.6 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:34.998Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:50.3 /80.0 C:26.7 /0.0 T0:140.0 /270.0 T1:139.8 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:35.981Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:50.6 /80.0 C:26.3 /0.0 T0:150.9 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:36.979Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:50.9 /80.0 C:25.8 /0.0 T0:158.7 /270.0 T1:140.1 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:37.979Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:51.1 /80.0 C:27.3 /0.0 T0:168.6 /270.0 T1:139.9 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:38.291Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"can_extrude":true}},5799.048837348]}}
+{"t_utc":"2026-11-08T22:13:38.985Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:51.5 /80.0 C:27.9 /0.0 T0:175.8 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:39.979Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:51.7 /80.0 C:27.0 /0.0 T0:182.7 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:40.993Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:52.0 /80.0 C:28.2 /0.0 T0:191.8 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:41.981Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:52.3 /80.0 C:26.2 /0.0 T0:198.7 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:42.983Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:52.7 /80.0 C:28.3 /0.0 T0:205.3 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:43.983Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:53.1 /80.0 C:26.9 /0.0 T0:213.8 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:44.984Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:53.4 /80.0 C:27.6 /0.0 T0:220.0 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:45.991Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:53.8 /80.0 C:26.4 /0.0 T0:226.1 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:46.984Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:54.2 /80.0 C:27.9 /0.0 T0:234.0 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:47.987Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:54.5 /80.0 C:27.9 /0.0 T0:239.9 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:48.992Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:54.9 /80.0 C:25.9 /0.0 T0:245.5 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:50.008Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:55.2 /80.0 C:26.6 /0.0 T0:252.9 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:50.986Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:55.5 /80.0 C:28.0 /0.0 T0:257.8 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:51.991Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:55.7 /80.0 C:28.0 /0.0 T0:261.6 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:52.987Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:56.1 /80.0 C:28.2 /0.0 T0:265.2 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:53.995Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:56.3 /80.0 C:26.2 /0.0 T0:267.4 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:54.994Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:56.6 /80.0 C:28.1 /0.0 T0:269.0 /270.0 T1:140.2 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:55.988Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:57.0 /80.0 C:27.8 /0.0 T0:269.9 /270.0 T1:140.0 /140.0 T2:25.4 /0.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:13:57.081Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_extruding","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_extruding"}}},5817.842873107]}}
+{"t_utc":"2026-11-08T22:14:16.379Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_flushing","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_flushing"}}},5837.137048658]}}
+{"t_utc":"2026-11-08T22:14:37.170Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"target":0.0}},5857.932407168]}}
+{"t_utc":"2026-11-08T22:14:44.404Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-08T22:14:44.443Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder0":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_finish","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_finish"}},"machine_state_manager":{"action_code":0}},5865.201074463]}}
+{"t_utc":"2026-11-08T22:14:44.749Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code PRINT_AUTO_FEEDING"]}}
+{"t_utc":"2026-11-08T22:14:44.943Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"machine_state_manager":{"action_code":133},"extruder2":{"target":140.0}},5865.702283213]}}
+{"t_utc":"2026-11-08T22:14:45.055Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder -> extruder1"]}}
+{"t_utc":"2026-11-08T22:14:45.055Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder !!!"]}}
+{"t_utc":"2026-11-08T22:14:45.197Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_picking","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_picking"}},"extruder1":{"activating_move":true}},5865.952408963]}}
+{"t_utc":"2026-11-08T22:14:46.193Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"UNKNOWN","park_pin":true}},5866.954837839]}}
+{"t_utc":"2026-11-08T22:14:46.420Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:14:46.492Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"state":"PARKED","active_pin":false,"grab_valid_pin":false}},5867.250334964]}}
+{"t_utc":"2026-11-08T22:14:47.492Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"UNKNOWN","active_pin":true}},5868.251274589]}}
+{"t_utc":"2026-11-08T22:14:47.992Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"ACTIVATE","park_pin":false}},5868.75236784]}}
+{"t_utc":"2026-11-08T22:14:48.242Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"grab_valid_pin":true}},5869.002650798]}}
+{"t_utc":"2026-11-08T22:14:48.798Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder1"]}}
+{"t_utc":"2026-11-08T22:14:49.027Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_feeding","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_feeding"}},"toolhead":{"extruder":"extruder1"},"extruder1":{"activating_move":false,"switch_count":6}},5869.773613298]}}
+{"t_utc":"2026-11-08T22:14:55.785Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":270.0}},5876.538903885]}}
+{"t_utc":"2026-11-08T22:14:58.044Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:75.3 /80.0 C:27.6 /0.0 T0:224.9 /0.0 T1:146.9 /270.0 T2:132.4 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:14:58.290Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_heating","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_heating"}}},5879.048754178]}}
+{"t_utc":"2026-11-08T22:14:59.043Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:75.5 /80.0 C:27.2 /0.0 T0:222.7 /0.0 T1:155.5 /270.0 T2:137.9 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:00.102Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:75.8 /80.0 C:28.7 /0.0 T0:221.1 /0.0 T1:162.4 /270.0 T2:139.3 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:01.048Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:76.1 /80.0 C:27.6 /0.0 T0:219.6 /0.0 T1:169.5 /270.0 T2:140.4 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:01.301Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"can_extrude":true}},5882.056029138]}}
+{"t_utc":"2026-11-08T22:15:02.052Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:76.3 /80.0 C:28.0 /0.0 T0:217.5 /0.0 T1:178.9 /270.0 T2:142.0 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:03.066Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:76.6 /80.0 C:27.6 /0.0 T0:216.0 /0.0 T1:185.8 /270.0 T2:142.2 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:04.054Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:76.9 /80.0 C:28.1 /0.0 T0:214.5 /0.0 T1:192.7 /270.0 T2:142.2 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:05.059Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.0 /80.0 C:27.7 /0.0 T0:212.6 /0.0 T1:201.9 /270.0 T2:142.3 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:06.062Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.2 /80.0 C:28.0 /0.0 T0:211.1 /0.0 T1:208.5 /270.0 T2:141.9 /140.0 T3:25.6 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:07.065Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.4 /80.0 C:28.9 /0.0 T0:209.6 /0.0 T1:215.0 /270.0 T2:141.5 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:08.075Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.5 /80.0 C:28.5 /0.0 T0:207.7 /0.0 T1:223.3 /270.0 T2:141.5 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:09.111Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.7 /80.0 C:27.2 /0.0 T0:206.3 /0.0 T1:229.5 /270.0 T2:141.0 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:10.096Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:77.9 /80.0 C:29.3 /0.0 T0:204.8 /0.0 T1:235.5 /270.0 T2:140.9 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:11.076Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.1 /80.0 C:27.3 /0.0 T0:202.8 /0.0 T1:243.3 /270.0 T2:140.8 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:12.076Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.2 /80.0 C:28.6 /0.0 T0:201.3 /0.0 T1:248.9 /270.0 T2:140.5 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:13.092Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.3 /80.0 C:28.8 /0.0 T0:199.5 /0.0 T1:254.4 /270.0 T2:140.4 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:14.147Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.4 /80.0 C:30.0 /0.0 T0:198.1 /0.0 T1:260.4 /270.0 T2:140.4 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:15.084Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.6 /80.0 C:28.9 /0.0 T0:196.8 /0.0 T1:263.3 /270.0 T2:140.1 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:16.091Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.6 /80.0 C:28.6 /0.0 T0:195.1 /0.0 T1:266.7 /270.0 T2:140.2 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:17.089Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.7 /80.0 C:27.7 /0.0 T0:193.9 /0.0 T1:268.5 /270.0 T2:140.3 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:18.092Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.8 /80.0 C:28.5 /0.0 T0:192.8 /0.0 T1:269.3 /270.0 T2:140.0 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:19.093Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.8 /80.0 C:29.6 /0.0 T0:191.2 /0.0 T1:270.1 /270.0 T2:140.1 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:20.096Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["B:78.9 /80.0 C:27.9 /0.0 T0:190.0 /0.0 T1:270.6 /270.0 T2:140.2 /140.0 T3:25.7 /0.0"]}}
+{"t_utc":"2026-11-08T22:15:21.351Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_extruding","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_extruding"}}},5902.110649397]}}
+{"t_utc":"2026-11-08T22:15:25.105Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_flushing","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_flushing"}}},5905.869772482]}}
+{"t_utc":"2026-11-08T22:15:37.159Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder":{"can_extrude":false}},5917.923575905]}}
+{"t_utc":"2026-11-08T22:15:45.933Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"target":0.0}},5926.695448576]}}
+{"t_utc":"2026-11-08T22:15:53.257Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-08T22:15:53.453Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed left":{"extruder1":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_finish","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_finish"}},"machine_state_manager":{"action_code":0}},5934.214318037]}}
+{"t_utc":"2026-11-08T22:15:53.629Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code PRINT_AUTO_FEEDING"]}}
+{"t_utc":"2026-11-08T22:15:53.629Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// extruder1 -> extruder2"]}}
+{"t_utc":"2026-11-08T22:15:53.631Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// park extruder1 !!!"]}}
+{"t_utc":"2026-11-08T22:15:53.703Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed right":{"extruder2":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_picking","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_picking"}},"machine_state_manager":{"action_code":133},"extruder2":{"activating_move":true}},5934.465237996]}}
+{"t_utc":"2026-11-08T22:15:54.954Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder1":{"state":"PARKED","park_pin":true,"active_pin":false,"grab_valid_pin":false}},5935.718333663]}}
+{"t_utc":"2026-11-08T22:15:55.037Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// pick extruder2 !!!"]}}
+{"t_utc":"2026-11-08T22:15:56.229Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"UNKNOWN","active_pin":true}},5936.971300997]}}
+{"t_utc":"2026-11-08T22:15:56.718Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"extruder2":{"state":"ACTIVATE","park_pin":false,"grab_valid_pin":true}},5937.472619997]}}
+{"t_utc":"2026-11-08T22:15:57.354Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Activating extruder extruder2"]}}
+{"t_utc":"2026-11-08T22:15:57.463Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed right":{"extruder2":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_feeding","channel_error":"ok","channel_error_state":"none","channel_action_state":"load_feeding"}},"toolhead":{"extruder":"extruder2"},"extruder2":{"activating_move":false,"switch_count":5}},5938.224501956]}}
+{"t_utc":"2026-11-08T22:16:09.495Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed right":{"extruder2":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_feeding","channel_error":"wheel_speed","channel_error_state":"none","channel_action_state":"load_feeding"}}},5950.257964837]}}
+{"t_utc":"2026-11-08T22:16:09.623Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-08T22:16:09.746Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"filament_feed right":{"extruder2":{"module_exist":true,"filament_detected":true,"disable_auto":false,"channel_state":"load_fail","channel_error":"wheel_speed","channel_error_state":"load_feeding","channel_action_state":"load_fail"}},"machine_state_manager":{"action_code":0},"extruder2":{"target":0.0}},5950.508466545]}}
+{"t_utc":"2026-11-08T22:16:09.924Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["!! extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!"]}}
+{"t_utc":"2026-11-08T22:16:09.927Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Pausing..."]}}
+{"t_utc":"2026-11-08T22:16:09.957Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: \"extruder2\" not hot enough"]}}
+{"t_utc":"2026-11-08T22:16:09.960Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// M107: Unsupported fan ID: 3"]}}
+{"t_utc":"2026-11-08T22:16:09.969Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// idle_timeout: Timeout set to 9999999999.00 s"]}}
+{"t_utc":"2026-11-08T22:16:09.982Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// mcu: stepper_x:-1424 stepper_y:-3132 stepper_z:-321017\n// stepper: stepper_x:154.749375 stepper_y:144.608750 stepper_z:255.245833\n// kinematic: X:149.679063 Y:5.070313 Z:255.245833\n// toolhead: X:149.679756 Y:5.070201 Z:255.245833 E:10.000000\n// gcode: X:149.679756 Y:5.070201 Z:255.245833 E:10.000000\n// gcode base: X:-0.320244 Y:0.070201 Z:-0.040500 E:10.000000\n// gcode homing: X:-0.320244 Y:0.070201 Z:-0.040500"]}}
+{"t_utc":"2026-11-08T22:16:10.000Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: extruder0 temp : 0.0"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: extruder1 temp : 0.0"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: extruder2 temp : 0.0"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: extruder3 temp : 0.0"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: bed temp : 80.0"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["echo: last extruder index :"]}}
+{"t_utc":"2026-11-08T22:16:10.001Z","msg":{"jsonrpc":"2.0","method":"notify_gcode_response","params":["// Success: Set action code IDLE"]}}
+{"t_utc":"2026-11-08T22:16:10.005Z","msg":{"jsonrpc":"2.0","method":"notify_exception_notification","params":[{"id":525,"index":2,"code":32,"level":2,"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!","timestamp":1794176170.958418}]}}
+{"t_utc":"2026-11-08T22:16:10.006Z","msg":{"jsonrpc":"2.0","method":"notify_status_update","params":[{"print_stats":{"state":"paused","exception":{"id":525,"index":2,"code":32,"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!","level":2},"message":"extruder[2]: state: load_feeding, error: wheel_speed!raw msg:logic error!"}},5950.759511337]}}

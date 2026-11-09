@@ -8,7 +8,7 @@ Guardian only watches. It never sends a command that changes the printer.
 
 ## Status
 
-Early work. The capture and incident code has only been tested with a stand-in test video. The camera on a real U1 has not been read yet.
+Early work. It has run on one real U1 on Windows. It has not run on a Raspberry Pi yet.
 
 What exists so far (Milestone 0, no printer needed):
 
@@ -19,9 +19,13 @@ What exists so far (Milestone 0, no printer needed):
 - Read-only Moonraker WebSocket client, event detectors, and `tools/ws_recorder.py`
 - `python -m guardian.main` runs it all (see config.example.yaml)
 - HTTP API and a browser dashboard (incident list, incident page with video, trigger marker and timeline)
+- Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
+  or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
+- Alert when the filament feeder reports an error (seen once on a real U1)
 - Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app or the printer screen has the camera on (about 1 frame per second)
 
-Everything about the real U1 (camera format, Moonraker objects, detection alerts) is **unverified**.
+What was seen on a real U1 is in `docs/u1-discovery-notes.md`. Anything not listed there, like Snapmaker's own
+spaghetti and bed alerts, is **unverified**. Guardian does not pretend to detect those.
 
 ## Platforms
 

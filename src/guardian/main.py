@@ -33,6 +33,7 @@ from guardian.notify.manager import NotificationManager
 from guardian.printer.detectors import Detector
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
+from guardian.printer.toolchanger import ToolchangeMonitor
 from guardian.storage.db import Database
 
 log = logging.getLogger("guardian")
@@ -70,6 +71,8 @@ class App:
         self.manager = IncidentManager(cfg, self.db, self.buffer, self.clock, self.ffmpeg, self.ffprobe, self.bus)
         self.tracker = StateTracker(self.bus)  # must subscribe before the detector
         self.detector = Detector(self.bus, self.tracker, self._report)
+        self.toolchanger = ToolchangeMonitor(cfg.toolchanger, self.db, self.bus, self.tracker, self.clock,
+                                             self._report)
         self.client = MoonrakerClient(cfg.printer.host, printer_port or cfg.printer.moonraker_port,
                                       self.bus, self.clock)
         if snapshot_mode:
@@ -137,6 +140,7 @@ class App:
                 "last_frame_utc": to_iso(last) if last else None, "last_error": self.capture.last_error,
             },
             "incidents": {"open": self.manager.open_count},
+            "toolchanger": self.toolchanger.status(),
             "notifications": {"email": {
                 "enabled": self.cfg.notifications.email.enabled,
                 # Only whether a key exists. The key itself is never shown.
@@ -175,6 +179,9 @@ class App:
         fixed = self.manager.recover_interrupted()
         if fixed:
             log.warning("recovered %d interrupted incident(s): %s", len(fixed), fixed)
+        left_open = self.toolchanger.recover_interrupted()
+        if left_open:
+            log.warning("marked %d unfinished tool change record(s) as interrupted", left_open)
         tasks = [
             asyncio.create_task(self.capture.supervise(stop), name="capture"),
             asyncio.create_task(self.client.run(stop), name="printer"),
@@ -197,6 +204,10 @@ class App:
                 await self.manager.tick()
             except Exception:  # noqa: BLE001 - keep ticking no matter what
                 log.exception("tick failed")
+            try:
+                await self.toolchanger.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("tool change tick failed")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:

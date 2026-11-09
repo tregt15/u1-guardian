@@ -27,6 +27,14 @@ blackbox:
   max_incident_s: 300
   duplicate_window_s: 5
 
+toolchanger:
+  enabled: true
+  # timeout_s: 20             # set a fixed number, or leave it out to learn it
+  timeout_floor_s: 15         # never call a change stuck sooner than this (real U1 changes took 3 to 5 s)
+  timeout_margin: 1.5         # learned timeout = slowest normal change (p99) x this
+  learn_count: 20             # good changes to measure before learning
+  settle_s: 3                 # after a change ends, time allowed for the tool states to settle
+
 storage:
   # Leave data_dir and buffer_dir out to use the normal folder for your OS.
   # data_dir: ./data
