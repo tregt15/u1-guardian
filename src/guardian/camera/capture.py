@@ -13,11 +13,14 @@ Segments are Matroska because it holds both H.264 and MJPEG.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+
+import httpx
 
 from guardian.camera import standin
 from guardian.camera.segment_buffer import SegmentBuffer
@@ -74,6 +77,8 @@ class Capture:
         self._started_mono = 0.0
         self.restarts = 0
         self.last_error: str | None = None
+        self.last_frame_utc: datetime | None = None  # snapshot mode: last NEW frame written
+        self._last_md5: str | None = None
 
     # ---- command ----
 
@@ -82,8 +87,13 @@ class Capture:
         csv = self.buffer.buffer_dir / f"list_{run_no:03d}.csv"
         pattern = self.buffer.buffer_dir / f"seg_%06d.{SEGMENT_EXT}"
         cmd = [self.ffmpeg, "-hide_banner", "-loglevel", "warning"]
-        if self.cfg.source_url:
-            # UNVERIFIED: how the real U1 camera is read. Copy mode, no re-encode.
+        if self.cfg.snapshot_url:
+            # JPEGs arrive on stdin. Wall-clock timestamps, so a gap in frames shows up as a gap
+            # in time. Copy mode, no re-encode.
+            cmd += ["-use_wallclock_as_timestamps", "1", "-f", "image2pipe", "-c:v", "mjpeg",
+                    "-i", "-", "-c", "copy"]
+        elif self.cfg.source_url:
+            # UNVERIFIED: a real video stream URL on the U1 was not found. Copy mode, no re-encode.
             cmd += ["-i", self.cfg.source_url, "-c", "copy"]
         else:
             if self.realtime:
@@ -141,8 +151,11 @@ class Capture:
             return
         if proc.poll() is None:
             try:
-                proc.stdin.write(b"q")
-                proc.stdin.flush()
+                if not self.cfg.snapshot_url:
+                    proc.stdin.write(b"q")  # snapshot mode: closing stdin below ends the input
+                    proc.stdin.flush()
+                else:
+                    proc.stdin.close()
             except OSError:
                 pass
             try:
@@ -171,6 +184,36 @@ class Capture:
         self.buffer.refresh()
         return rc
 
+    async def poll_snapshots(self, stop_event: asyncio.Event) -> None:
+        """Snapshot mode: GET the JPEG and feed NEW frames to FFmpeg. Repeats of the same
+        picture (viewer closed, file not updating) are not written, so a gap stays a gap.
+
+        Read only: this only issues HTTP GET.
+        """
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            while not stop_event.is_set():
+                try:
+                    r = await client.get(self.cfg.snapshot_url)
+                    if r.status_code == 200 and r.content:
+                        md5 = hashlib.md5(r.content).hexdigest()
+                        if md5 != self._last_md5 and self.running:
+                            await asyncio.to_thread(self._write_frame, r.content)
+                            self._last_md5 = md5
+                            self.last_frame_utc = self.clock.now_utc()
+                except (httpx.HTTPError, OSError, ValueError) as exc:
+                    self.last_error = f"snapshot poll failed: {exc!r}"
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=self.cfg.snapshot_poll_s)
+                except asyncio.TimeoutError:
+                    pass
+
+    def _write_frame(self, data: bytes) -> None:
+        stdin = self._proc.stdin if self._proc else None
+        if stdin is None:
+            return
+        stdin.write(data)
+        stdin.flush()
+
     async def supervise(self, stop_event: asyncio.Event, poll_s: float = 0.5) -> None:
         """Keep capture alive. Restart with backoff if it exits, kill it if it stalls.
 
@@ -179,6 +222,7 @@ class Capture:
         backoff = 1.0
         seg = self.cfg.segment_length_s
         last_count, last_progress = -1, self.clock.monotonic()
+        poller = asyncio.create_task(self.poll_snapshots(stop_event)) if self.cfg.snapshot_url else None
         while not stop_event.is_set():
             try:
                 if not self.running:
@@ -200,7 +244,8 @@ class Capture:
                 if count != last_count:
                     last_count, last_progress = count, now
                     backoff = 1.0
-                elif now - last_progress > 3 * seg + STARTUP_GRACE_S:
+                elif not self.cfg.snapshot_url and now - last_progress > 3 * seg + STARTUP_GRACE_S:
+                    # (snapshot mode: no new frames just means nobody is viewing, not a stall)
                     self.last_error = "no new segment, capture stalled"
                     log.warning(self.last_error)
                     self.stop(timeout_s=1.0)
@@ -209,4 +254,6 @@ class Capture:
                 log.exception("capture supervisor error")
                 await asyncio.sleep(1.0)
             await asyncio.sleep(poll_s)
+        if poller:
+            await poller
         self.stop()

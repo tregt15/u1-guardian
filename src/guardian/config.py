@@ -39,6 +39,13 @@ class PrinterConfig(_Section):
 class CameraConfig(_Section):
     # Empty means use the stand-in test video. The real URL is UNVERIFIED until discovery.
     source_url: str = ""
+    # Snapshot polling (U1, verified on one printer): GET a JPEG about once a second.
+    # On the U1 this is http://<host>/server/files/camera/monitor.jpg. It only changes while
+    # a viewer (app or screen) has the camera on. Empty means do not use snapshot mode.
+    snapshot_url: str = ""
+    snapshot_poll_s: float = Field(default=0.5, gt=0.05, le=5.0)
+    # A segment longer than segment_length_s + this is treated as hiding a footage gap.
+    max_frame_gap_s: float = Field(default=3.0, gt=0.0)
     standin_codec: Literal["h264", "mjpeg"] = "h264"
     segment_length_s: float = Field(default=2.0, ge=1.0, le=10.0)
     latency_offset_ms: int = 0

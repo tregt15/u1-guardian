@@ -285,18 +285,20 @@ class IncidentManager:
 
     def _coverage_notes(self, inc: _Open, segs: list[Segment]) -> list[str]:
         notes: list[str] = []
+        # Snapshot mode has about 1 frame per second, so normal spacing is bigger than 0.5 s.
+        tol = self.cfg.camera.max_frame_gap_s if self.cfg.camera.snapshot_url else TOL_S
         lead = (segs[0].start_utc - inc.pre_start).total_seconds()
-        if lead > TOL_S:
+        if lead > tol:
             notes.append(
                 f"Pre-roll is {lead:.1f}s short. Footage starts {lead:.1f}s after the requested "
                 "start (buffer not full yet, or camera was down)."
             )
         tail = (inc.deadline - segs[-1].end_utc).total_seconds()
-        if tail > TOL_S:
+        if tail > tol:
             notes.append(f"Post-roll is {tail:.1f}s short. Footage ends before the requested end.")
         for a, b in zip(segs, segs[1:]):
             gap = (b.start_utc - a.end_utc).total_seconds()
-            if gap > TOL_S:
+            if gap > tol:
                 notes.append(f"Gap of {gap:.1f}s in the footage after {to_iso(a.end_utc)}.")
         return notes
 
