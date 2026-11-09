@@ -22,7 +22,7 @@ from guardian.camera import standin
 from guardian.camera.capture import Capture, check_ffmpeg
 from guardian.camera.segment_buffer import SegmentBuffer
 from guardian.clock import Clock, ManualClock, SystemClock, from_iso
-from guardian.config import BlackboxConfig, CameraConfig, Config, StorageConfig
+from guardian.config import BlackboxConfig, CameraConfig, Config, PrinterConfig, StorageConfig
 from guardian.storage.db import Database
 
 SIM_START = datetime(2026, 11, 8, 12, 0, 0, tzinfo=timezone.utc)
@@ -52,8 +52,9 @@ class SimEnv:
 
 def make_config(workdir: Path, *, codec: str = "h264", pre_s: float = 30, post_s: float = 15,
                 max_incident_s: float = 300, duplicate_window_s: float = 5,
-                segment_length_s: float = 2) -> Config:
+                segment_length_s: float = 2, printer_host: str = "127.0.0.1") -> Config:
     return Config(
+        printer=PrinterConfig(host=printer_host),
         camera=CameraConfig(standin_codec=codec, segment_length_s=segment_length_s),
         blackbox=BlackboxConfig(pre_trigger_s=pre_s, post_trigger_s=post_s,
                                 max_incident_s=max_incident_s, duplicate_window_s=duplicate_window_s),

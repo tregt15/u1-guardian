@@ -62,6 +62,7 @@ class Capture:
         *,
         realtime: bool = True,
         duration_s: float | None = None,
+        active=None,
     ) -> None:
         """realtime=False runs the stand-in source as fast as FFmpeg can (for tests).
         duration_s stops the stand-in after that many seconds of video."""
@@ -70,6 +71,7 @@ class Capture:
         self.clock = clock
         self.realtime = realtime
         self.duration_s = duration_s
+        self.active = active  # optional callable. Snapshot frames are only fed while it returns True.
         self.ffmpeg = resolve_tool(cfg.ffmpeg_path)
         self._proc: subprocess.Popen | None = None
         self._run_no = 0
@@ -90,8 +92,10 @@ class Capture:
         if self.cfg.snapshot_url:
             # JPEGs arrive on stdin. Wall-clock timestamps, so a gap in frames shows up as a gap
             # in time. Copy mode, no re-encode.
-            cmd += ["-use_wallclock_as_timestamps", "1", "-f", "image2pipe", "-c:v", "mjpeg",
-                    "-i", "-", "-c", "copy"]
+            # Small probe limits: FFmpeg's default waits for about 5 MB (around 50 frames of 1080p
+            # JPEG at 1 frame per second), so the first segment would take nearly a minute.
+            cmd += ["-use_wallclock_as_timestamps", "1", "-probesize", "32", "-analyzeduration", "0",
+                    "-f", "image2pipe", "-c:v", "mjpeg", "-i", "-", "-c", "copy"]
         elif self.cfg.source_url:
             # UNVERIFIED: a real video stream URL on the U1 was not found. Copy mode, no re-encode.
             cmd += ["-i", self.cfg.source_url, "-c", "copy"]
@@ -196,7 +200,8 @@ class Capture:
                     r = await client.get(self.cfg.snapshot_url)
                     if r.status_code == 200 and r.content:
                         md5 = hashlib.md5(r.content).hexdigest()
-                        if md5 != self._last_md5 and self.running:
+                        wanted = self.active is None or self.active()
+                        if md5 != self._last_md5 and self.running and wanted:
                             await asyncio.to_thread(self._write_frame, r.content)
                             self._last_md5 = md5
                             self.last_frame_utc = self.clock.now_utc()

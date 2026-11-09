@@ -16,6 +16,9 @@ What exists so far (Milestone 0, no printer needed):
 - Camera capture with a rolling 2 second segment buffer (stand-in test video for now)
 - Incident manager: saves 30 s before and 15 s after a trigger, merges repeats, and reports honest recording status
 - `tools/simulate_trigger.py` to fire fake triggers and check the clips
+- Read-only Moonraker WebSocket client, event detectors, and `tools/ws_recorder.py`
+- `python -m guardian.main` runs it all (see config.example.yaml)
+- Camera on the U1: snapshot polling only. Footage exists only while the Snapmaker app or the printer screen has the camera on (about 1 frame per second)
 
 Everything about the real U1 (camera format, Moonraker objects, detection alerts) is **unverified**.
 
