@@ -91,9 +91,53 @@ async function refreshStatus() {
     if (em.enabled && !em.configured) notes.push("Email alerts are on but no Resend API key was found. Set your own key (see the README). Alerts will not be sent.");
     w.replaceChildren(...notes.map(n => el("div", { class: "notice warn" }, n)));
     showPaused(p);
+    showControls(p, s.controls || {});
+    showLive(p, c);
   } catch (e) {
     document.getElementById("conn").textContent = "Cannot reach Guardian: " + e.message;
   }
+}
+
+function showControls(p, ctl) {
+  const box = document.getElementById("controls");
+  if (!ctl.enabled || !p.connected) { box.replaceChildren(); return; }
+  const btns = [];
+  if (p.print_state === "printing") btns.push(el("button", { onclick: () => control("pause") }, "Pause"));
+  if (p.print_state === "paused") btns.push(el("button", { class: "primary", onclick: () => control("resume") }, "Resume"));
+  if (["printing", "paused"].includes(p.print_state)) btns.push(el("button", { class: "danger", onclick: () => control("cancel") }, "Stop print"));
+  box.replaceChildren(...btns);
+}
+
+async function control(action) {
+  if (action === "cancel") {
+    const typed = prompt("Stop the print for good? It cannot be resumed after this. Type STOP to confirm.");
+    if (!typed || typed.trim().toUpperCase() !== "STOP") return;
+  } else if (!confirm(action === "pause" ? "Pause the print?" : "Resume the print? Check the printer and the build plate first.")) {
+    return;
+  }
+  try {
+    await api("/api/printer/" + action, { method: "POST", body: JSON.stringify({ confirm: true }) });
+    setTimeout(refreshStatus, 1500);
+  } catch (e) { alert("Not sent: " + e.message); }
+}
+
+function showLive(p, c) {
+  const box = document.getElementById("live-box"), img = document.getElementById("live");
+  const want = c.mode === "snapshot" && (["printing", "paused"].includes(p.print_state) || c.keepalive === "always");
+  if (!want) {
+    if (!box.hidden) { img.removeAttribute("src"); box.hidden = true; }
+    return;
+  }
+  box.hidden = false;
+  if (img.getAttribute("src") && Date.now() - (img.dataset.started || 0) > 9 * 60 * 1000) img.removeAttribute("src");
+  if (!img.getAttribute("src")) {
+    img.dataset.started = Date.now();
+    img.src = "/api/camera/stream?t=" + Date.now() + (token() ? "&token=" + encodeURIComponent(token()) : "");
+    img.onerror = () => setTimeout(() => img.removeAttribute("src"), 3000);  // reconnect on the next refresh
+  }
+  document.getElementById("live-note").textContent = c.viewer_active
+    ? "About 1 to 2 pictures a second from the printer camera."
+    : "No new pictures right now. The picture stays on the last one until the camera gives new ones.";
 }
 
 let pausedShown = false;
@@ -125,7 +169,7 @@ async function showPaused(p) {
     el("ul", {},
       el("li", {}, "Look at the print and the build plate. Remove anything loose."),
       el("li", {}, "Check the filament path of the tool that was active" + (p.active_toolhead ? " (" + p.active_toolhead + ")" : "") + "."),
-      el("li", {}, "Resume or cancel on the printer screen or in the app. Guardian never resumes a print.")),
+      el("li", {}, "Then use Resume or Stop on this page, the printer screen or the app. Guardian only resumes when you click Resume.")),
     inc ? el("p", {}, el("a", { href: "/incident?uid=" + encodeURIComponent(inc.uid) }, "Open the incident for this pause")) : null);
   box.hidden = false;
 }

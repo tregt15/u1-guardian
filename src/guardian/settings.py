@@ -27,6 +27,8 @@ FIELDS: list[dict[str, Any]] = [
      "options": {"off": "Off", "printing": "During prints", "always": "Always"},
      "help": "Guardian turns the U1 camera on by itself (LAN only). It never turns it off. "
              "Always also keeps recent footage while the printer is idle."},
+    {"key": "controls.enabled", "group": "Printer controls", "label": "Show Pause, Resume and Stop buttons",
+     "kind": "bool", "help": "Buttons on the dashboard. Each asks you to confirm before anything is sent."},
     {"key": "autopause.enabled", "group": "Auto pause", "label": "Pause the print on a problem", "kind": "bool",
      "help": "If Guardian finds a problem below and the printer did not pause by itself, Guardian pauses it."},
     {"key": "autopause.grace_s", "group": "Auto pause", "label": "Wait before pausing (seconds)", "kind": "number",

@@ -81,6 +81,11 @@ class AiModelBody(BaseModel):
 AI_PICTURE_RE = re.compile(r"^ai_picture_[0-9]{1,3}\.jpg$")
 
 
+class ControlBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = False
+
+
 class ManualBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     note: str | None = Field(default=None, max_length=500)
@@ -318,6 +323,42 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(502, f"could not remove the model: {exc}") from exc
         await ai.refresh(force=True)
         return {"removed": model}
+
+    @app.post("/api/printer/{action}", dependencies=[Depends(auth)])
+    async def printer_control(action: Literal["pause", "resume", "cancel"], body: ControlBody) -> dict:
+        """Dashboard buttons. Only runs when the page confirmed with the person first."""
+        fn = ctx.extra.get("control")
+        if fn is None:
+            raise HTTPException(409, "printer controls are not available in this mode")
+        if not body.confirm:
+            raise HTTPException(400, "confirm must be true")
+        try:
+            return await fn(action)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/api/camera/stream", dependencies=[Depends(auth)])
+    async def camera_stream(request: Request):
+        """Live view as MJPEG (multipart). Uses the pictures Guardian already stores, so a viewer adds no
+        requests to the printer. Ends when the page closes or after 10 minutes (the page then reconnects)."""
+        fn = ctx.extra.get("latest_frame")
+        if fn is None:
+            raise HTTPException(409, "no camera in this mode")
+
+        async def frames():
+            last_sent = None
+            loop = asyncio.get_running_loop()
+            end = loop.time() + float(ctx.extra.get("stream_seconds", 600))
+            while loop.time() < end and not await request.is_disconnected():
+                latest = fn()
+                if latest and latest[0] != last_sent:
+                    last_sent = latest[0]
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                           + str(len(latest[1])).encode() + b"\r\n\r\n" + latest[1] + b"\r\n")
+                await asyncio.sleep(0.25)
+
+        return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
+                                 headers={"Cache-Control": "no-store"})
 
     @app.get("/api/camera/latest", dependencies=[Depends(auth)])
     async def camera_latest():

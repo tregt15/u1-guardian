@@ -245,3 +245,32 @@ def test_metadata_between_prints_has_no_old_file():
     assert tracker.incident_metadata() == {"active_toolhead": "extruder1"}
     tracker.status["print_stats"]["state"] = "printing"
     assert tracker.incident_metadata()["print_filename"] == "old.gcode"
+
+
+
+async def test_resume_and_cancel_only_with_controls_on():
+    mock = MockMoonraker([[]])
+    await mock.start()
+    client = MoonrakerClient("127.0.0.1", mock.port, EventBus(), backoff_start_s=0.05, backoff_cap_s=0.2)
+    for method in ("printer.print.resume", "printer.print.cancel", "printer.print.pause"):
+        with pytest.raises(RuntimeError):
+            await client._send(None, 99, method)
+    client.allow_controls = True
+    with pytest.raises(RuntimeError):
+        await client._send(None, 99, "printer.print.resume", {"x": 1})
+    with pytest.raises(RuntimeError):
+        await client._send(None, 99, "printer.gcode.script", {"script": "RESUME"})
+    stop = asyncio.Event()
+    task = asyncio.create_task(client.run(stop))
+    try:
+        async with asyncio.timeout(5):
+            while not client.connected:
+                await asyncio.sleep(0.02)
+            assert await client.resume_print() and await client.cancel_print() and await client.pause_print()
+            while len(mock.controls) < 2 or not mock.pauses:
+                await asyncio.sleep(0.02)
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+    assert mock.controls == ["printer.print.resume", "printer.print.cancel"] and mock.refused == []

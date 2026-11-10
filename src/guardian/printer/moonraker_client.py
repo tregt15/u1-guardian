@@ -10,9 +10,12 @@ Two exceptions, both owner approved (2026-11-09), each behind its own switch:
   the printer's camera pictures for LAN viewers. It does not move, heat or pause anything.
   Verified on a real U1: pictures start within about 2 s. There is no stop call, so Guardian
   can never turn off somebody else's camera view.
-- `printer.print.pause` with no params (allow_pause). Standard Moonraker. On the U1 it runs
-  Klipper's PAUSE (read in pause_resume.py), which refuses when not printing or already
-  paused. Never resume, cancel or anything else. Not yet sent to a real printer: UNVERIFIED live.
+- `printer.print.pause` with no params (allow_pause, or allow_controls). Standard Moonraker. On the
+  U1 it runs Klipper's PAUSE (read in pause_resume.py), which refuses when not printing or already
+  paused. Verified on the real U1 (2026-11-10): it paused a print.
+- `printer.print.resume` and `printer.print.cancel` with no params (allow_controls). Only sent when a
+  person clicks Resume or Stop on the dashboard and confirms (owner asked, 2026-11-10). Guardian
+  itself never sends them.
 
 Behavior from spec section 5.2:
 - one persistent connection, reconnect with backoff (1 s up to 30 s)
@@ -43,6 +46,8 @@ ALLOWED_METHODS = frozenset({"server.info", "printer.objects.list", "printer.obj
 CAMERA_START = "camera.start_monitor"
 CAMERA_START_PARAMS = {"domain": "lan", "interval": 0}
 PAUSE = "printer.print.pause"
+RESUME = "printer.print.resume"
+CANCEL = "printer.print.cancel"
 
 _ID_INFO, _ID_LIST, _ID_SUBSCRIBE = 1, 2, 3
 
@@ -59,6 +64,7 @@ class MoonrakerClient:
         backoff_cap_s: float = 30.0,
         allow_camera_start: bool = False,
         allow_pause: bool = False,
+        allow_controls: bool = False,
     ) -> None:
         self.url = f"ws://{host}:{port}/websocket"
         self.bus = bus
@@ -71,13 +77,15 @@ class MoonrakerClient:
         self.sent_methods: list[str] = []  # for tests and the audit trail
         self.allow_camera_start = allow_camera_start
         self.allow_pause = allow_pause
+        self.allow_controls = allow_controls
         self._ws = None
         self._next_id = 1000
 
     async def _send(self, ws, rpc_id: int, method: str, params: dict | None = None) -> None:
         camera_ok = self.allow_camera_start and method == CAMERA_START and params == CAMERA_START_PARAMS
-        pause_ok = self.allow_pause and method == PAUSE and params is None
-        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok:
+        pause_ok = (self.allow_pause or self.allow_controls) and method == PAUSE and params is None
+        control_ok = self.allow_controls and method in (RESUME, CANCEL) and params is None
+        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok and not control_ok:
             raise RuntimeError(f"refusing to send {method}: not on the read-only list")
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": rpc_id}
         if params is not None:
@@ -96,11 +104,22 @@ class MoonrakerClient:
 
     async def pause_print(self) -> bool:
         """Ask the printer to pause the print. Returns False if not connected."""
+        return await self._simple(PAUSE)
+
+    async def resume_print(self) -> bool:
+        """Only for the dashboard Resume button (a person clicked and confirmed)."""
+        return await self._simple(RESUME)
+
+    async def cancel_print(self) -> bool:
+        """Only for the dashboard Stop button (a person clicked and confirmed)."""
+        return await self._simple(CANCEL)
+
+    async def _simple(self, method: str) -> bool:
         ws = self._ws
         if ws is None or not self.connected:
             return False
         self._next_id += 1
-        await self._send(ws, self._next_id, PAUSE)
+        await self._send(ws, self._next_id, method)
         return True
 
     async def run(self, stop: asyncio.Event) -> None:

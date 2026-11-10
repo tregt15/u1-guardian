@@ -93,6 +93,17 @@ What it does:
 You need a graphics card or a fast computer. A Raspberry Pi is too small for these models. A Pi can use Ollama on
 another computer (set the Ollama address). How well the models judge U1 pictures has not been tested yet.
 
+### Printer controls
+
+The dashboard has Pause, Resume and Stop buttons while a print runs. Each asks you to confirm. Stop asks you to
+type STOP, because a stopped print cannot be resumed. They use Moonraker's normal requests, the same as Fluidd.
+Guardian only resumes or stops a print when you click. Turn the buttons off on the Settings page if you like.
+
+### Live camera
+
+The dashboard shows the printer camera while a print runs (or all the time if Auto camera is set to Always). It uses
+the pictures Guardian already saves, about 1 to 2 a second, so watching adds no load on the printer.
+
 ## Settings page
 
 Open `/settings` on the dashboard. Changes apply right away and are saved to `settings.yaml` in Guardian's data

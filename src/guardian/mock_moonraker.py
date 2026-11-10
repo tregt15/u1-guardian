@@ -50,6 +50,7 @@ class MockMoonraker:
         self.refused: list[str] = []
         self.camera_starts: list[Any] = []
         self.pauses: list[Any] = []
+        self.controls: list[str] = []
         self._server = None
 
     async def start(self) -> None:
@@ -81,6 +82,10 @@ class MockMoonraker:
                     status = self.snapshots[n] if n < len(self.snapshots) else {
                         "print_stats": {"state": "standby", "filename": "", "exception": {}}}
                     result = {"eventtime": 1000.0, "status": status}
+                elif method in ("printer.print.resume", "printer.print.cancel"):
+                    self.controls.append(method)
+                    await ws.send(json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": "ok"}))
+                    continue
                 elif method == "printer.print.pause":
                     self.pauses.append(req.get("params"))
                     await ws.send(json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": "ok"}))

@@ -248,6 +248,13 @@ class AutopauseConfig(_Section):
     triggers: list[Literal[PAUSABLE_EVENTS]] = list(PAUSABLE_EVENTS)  # type: ignore[valid-type]
 
 
+class ControlsConfig(_Section):
+    """Pause, Resume and Stop buttons on the dashboard (owner asked, 2026-11-10). Each sends one standard Moonraker
+    request only when a person clicks it and confirms. Guardian itself never resumes or stops a print."""
+
+    enabled: bool = True
+
+
 class Config(_Section):
     printer: PrinterConfig = PrinterConfig()
     camera: CameraConfig = CameraConfig()
@@ -255,6 +262,7 @@ class Config(_Section):
     toolchanger: ToolchangerConfig = ToolchangerConfig()
     autopause: AutopauseConfig = AutopauseConfig()
     ai: AiConfig = AiConfig()
+    controls: ControlsConfig = ControlsConfig()
     storage: StorageConfig = StorageConfig()
     api: ApiConfig = ApiConfig()
     notifications: NotificationsConfig = NotificationsConfig()

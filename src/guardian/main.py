@@ -17,7 +17,6 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-import httpx
 import uvicorn
 
 from guardian.ai.diagnosis import Diagnoser
@@ -128,7 +127,9 @@ class App:
                                          notifier=self.notifier, settings_fn=self.apply_settings,
                                          extra={"ai": self.ai, "installer": self.ollama_installer,
                                                 "fresh_frame": self._fresh_frame,
-                                                "selftest": self.run_selftest}))
+                                                "selftest": self.run_selftest,
+                                                "control": self.printer_control,
+                                                "latest_frame": self._latest_frame}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.connected", self._on_reconnect)
@@ -166,17 +167,36 @@ class App:
             log.exception("could not save printer logs for %s", uid)
         await self.diagnoser.run(uid)  # needs the logs, so it runs after them. Never raises.
 
+    def _latest_frame(self) -> tuple | None:
+        """(time, JPEG bytes) of the newest stored picture, or None. No extra request to the printer."""
+        data = getattr(self.capture, "last_frame_bytes", None)
+        last = self.capture.last_frame_utc
+        return (last, data) if data and last else None
+
     async def _fresh_frame(self) -> bytes | None:
         """The current camera picture, only if pictures are really coming in right now."""
-        url = self.cfg.camera.snapshot_url
-        last = self.capture.last_frame_utc
-        if not url or last is None or (self.clock.now_utc() - last).total_seconds() > 3.0:
+        latest = self._latest_frame()
+        if latest is None or (self.clock.now_utc() - latest[0]).total_seconds() > 3.0:
             return None
-        async with httpx.AsyncClient(timeout=5.0) as c:
-            r = await c.get(url)
-        if r.status_code != 200 or not r.content.startswith(b"\xff\xd8"):  # JPEG start bytes
-            return None
-        return r.content
+        return latest[1]
+
+    async def printer_control(self, action: str) -> dict:
+        """Pause, Resume or Stop from the dashboard. A person clicked and confirmed. Raises ValueError."""
+        if not self.cfg.controls.enabled:
+            raise ValueError("Printer controls are turned off in Settings.")
+        state = self.tracker.print_state
+        allowed = {"pause": ("printing",), "resume": ("paused",), "cancel": ("printing", "paused")}
+        if action not in allowed:
+            raise ValueError("unknown action")
+        if state not in allowed[action]:
+            raise ValueError(f"The printer is {state or 'not connected'}, so {action} does not apply.")
+        send = {"pause": self.client.pause_print, "resume": self.client.resume_print,
+                "cancel": self.client.cancel_print}[action]
+        if not await send():
+            raise ValueError("The printer is not connected.")
+        log.warning("dashboard user asked the printer to %s the print", action)
+        self.db.log("controls", "warning", f"user asked the printer to {action} the print", {"state_before": state})
+        return {"sent": action, "state_before": state}
 
     def _save_ai_pictures(self, result, frames: list[bytes]) -> None:
         row = self.db.get_incident(result.incident_id)
@@ -221,6 +241,7 @@ class App:
         """The client may only send the two opt-in requests while their settings allow it."""
         self.client.allow_camera_start = self.snapshot_mode and self.cfg.camera.keepalive != "off"
         self.client.allow_pause = self.cfg.autopause.enabled
+        self.client.allow_controls = self.cfg.controls.enabled
 
     def apply_settings(self, changes: dict) -> list[str]:
         """Check, save and apply dashboard settings. Raises settings.SettingsError."""
@@ -283,6 +304,7 @@ class App:
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
             "autopause": self.autopause.status(),
+            "controls": {"enabled": self.cfg.controls.enabled},
             "selftest": {
                 "ok": self.selftest_result["ok"] if self.selftest_result else None,
                 "ran_utc": self.selftest_result["ran_utc"] if self.selftest_result else None,

@@ -139,6 +139,7 @@ class SnapshotCapture:
         self.cfg, self.buffer, self.clock = cfg, buffer, clock
         self.active = active  # optional callable. Frames are only stored while it returns True.
         self.last_frame_utc: datetime | None = None
+        self.last_frame_bytes: bytes | None = None  # newest stored picture, for the live view and AI checks
         self.last_error: str | None = None
         self.restarts = 0
         self._running = False
@@ -180,3 +181,4 @@ class SnapshotCapture:
         now = self.clock.now_utc()
         await asyncio.to_thread(self.buffer.add_frame, r.content, now)
         self.last_frame_utc = now
+        self.last_frame_bytes = r.content

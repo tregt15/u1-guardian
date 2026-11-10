@@ -268,3 +268,36 @@ def test_settings_need_token_when_set(tmp_path):
     env = make_env(tmp_path, token="s3cret")
     assert env.client.get("/api/settings").status_code == 401
     assert env.client.put("/api/settings", json={"changes": {}}).status_code == 401
+
+
+
+def test_printer_controls_need_confirm_and_report_refusals(tmp_path):
+    env = make_env(tmp_path)
+    assert env.client.post("/api/printer/pause", json={"confirm": True}).status_code == 409  # no app here
+    calls = []
+
+    async def control(action):
+        calls.append(action)
+        if action == "resume":
+            raise ValueError("The printer is printing, so resume does not apply.")
+        return {"sent": action}
+
+    env.ctx.extra["control"] = control
+    env.client = TestClient(create_app(env.ctx))
+    assert env.client.post("/api/printer/pause", json={}).status_code == 400
+    assert env.client.post("/api/printer/pause", json={"confirm": True}).json() == {"sent": "pause"}
+    r = env.client.post("/api/printer/resume", json={"confirm": True})
+    assert r.status_code == 409 and "does not apply" in r.json()["detail"]
+    assert env.client.post("/api/printer/gcode", json={"confirm": True}).status_code == 422
+    assert calls == ["pause", "resume"]
+
+
+def test_camera_stream_sends_jpeg_parts(tmp_path):
+    from datetime import datetime, timezone
+    env = make_env(tmp_path)
+    env.ctx.extra["latest_frame"] = lambda: (datetime(2026, 11, 10, tzinfo=timezone.utc), b"\xff\xd8jpeg")
+    env.ctx.extra["stream_seconds"] = 0.6
+    env.client = TestClient(create_app(env.ctx))
+    r = env.client.get("/api/camera/stream")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("multipart/x-mixed-replace")
+    assert r.content.count(b"--frame") == 1 and b"\xff\xd8jpeg" in r.content  # same picture is sent once

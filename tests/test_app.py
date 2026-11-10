@@ -142,3 +142,34 @@ def test_auto_camera_always_also_keeps_footage_when_idle(tmp_path):
         assert app._buffer_wanted() is True
     finally:
         app.db.close()
+
+
+
+async def test_dashboard_controls_follow_the_print_state(tmp_path):
+    cfg = sim.make_config(tmp_path, pre_s=6, post_s=4)
+    printing = {"print_stats": {"state": "printing", "filename": "demo.gcode", "exception": {},
+                                "info": {"total_layer": 200, "current_layer": 1}}}
+    mock = MockMoonraker([[]], snapshots=[printing])
+    await mock.start()
+    app = App(cfg, printer_port=mock.port)
+    stop = asyncio.Event()
+    task = asyncio.create_task(app.run(stop))
+    try:
+        async with asyncio.timeout(10):
+            while app.tracker.print_state != "printing":
+                await asyncio.sleep(0.05)
+        with pytest.raises(ValueError, match="does not apply"):
+            await app.printer_control("resume")
+        assert (await app.printer_control("pause"))["sent"] == "pause"
+        assert (await app.printer_control("cancel"))["sent"] == "cancel"
+        app.cfg.controls.enabled = False
+        with pytest.raises(ValueError, match="turned off"):
+            await app.printer_control("pause")
+        async with asyncio.timeout(5):
+            while not mock.pauses or not mock.controls:
+                await asyncio.sleep(0.05)
+    finally:
+        stop.set()
+        await task
+        await mock.stop()
+    assert mock.controls == ["printer.print.cancel"] and len(mock.pauses) == 1
