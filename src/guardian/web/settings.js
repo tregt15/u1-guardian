@@ -82,6 +82,9 @@ async function load() {
 
 document.getElementById("save").addEventListener("click", async (ev) => {
   const c = changes();
+  if (c["ai.provider"] && c["ai.provider"] !== "local") {
+    if (!confirm("With an online AI service, the camera pictures and printer logs for each check are sent to that company. Continue?")) return;
+  }
   if (c["autopause.enabled"] === true || (c["camera.keepalive"] && c["camera.keepalive"] !== "off")) {
     // Both of these let Guardian send something to the printer. Say so plainly.
     if (!confirm("This lets Guardian send a request to the printer (turn the camera on, or pause a print). Save?")) return;
@@ -106,6 +109,18 @@ async function loadAi() {
   try { r = await api("/api/ai/status"); }
   catch (e) { box.replaceChildren(el("p", { class: "muted" }, "Could not check the AI: " + e.message)); return; }
   const parts = [];
+  if (r.provider && r.provider !== "local") {
+    const name = r.provider === "anthropic" ? "Anthropic (Claude)" : "an OpenAI-compatible service" + (r.remote_url ? " at " + r.remote_url : "");
+    parts.push(el("div", { class: "notice warn" }, "Online AI: the camera pictures and printer logs for each check are sent to " + name +
+      ". Use local AI (Ollama) if you want everything to stay on your network."));
+    parts.push(el("p", {}, "API key (" + r.api_key_env + "): ", r.api_key_found ? badge("found", "ok") : badge("missing", "bad")));
+    if (!r.api_key_found) parts.push(el("p", { class: "muted" }, "Set the environment variable " + r.api_key_env +
+      " to your key, or add a line " + r.api_key_env + "=your-key to the .env file next to config.yaml, then restart Guardian."));
+    parts.push(el("p", {}, "Model: " + (r.model || "not set") + ". Connection: " + (r.remote_message || "not checked yet")));
+    parts.push(el("p", { class: "muted" }, r.usable ? "The AI is ready." : !r.enabled ? "Turn on \"Use AI\" above to use it." : "Not ready yet. See above."));
+    box.replaceChildren(...parts);
+    return;
+  }
   const inst = r.install || { plan: {}, state: {} };
   const ist = inst.state || {};
   if (ist.running || ist.error || (ist.done && !r.ollama_found)) {
@@ -148,7 +163,7 @@ async function loadAi() {
       if (d.running) setTimeout(loadAi, 2000);
     }
     parts.push(el("p", { class: "muted" }, r.usable ? "The AI is ready." :
-      !r.enabled ? "Turn on \"Use local AI\" above to use it." : "Download the chosen model to start using the AI."));
+      !r.enabled ? "Turn on \"Use AI\" above to use it." : "Download the chosen model to start using the AI."));
   }
   box.replaceChildren(...parts);
 }
@@ -169,6 +184,11 @@ async function afterAiTurnedOn() {
   let r;
   try { r = await api("/api/ai/status"); } catch (e) { return; }
   if ((r.download || {}).running || (((r.install || {}).state) || {}).running) return;  // already on its way
+  if (r.provider && r.provider !== "local") {
+    if (!r.api_key_found) alert("The online AI needs your API key. Put it in the environment variable " + r.api_key_env +
+      " or in the .env file next to config.yaml, then restart Guardian.");
+    return;
+  }
   if (r.ollama_found) {
     if (!r.model_ready) download(r.model, r.models[r.model] || r.model);
     return;

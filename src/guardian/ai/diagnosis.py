@@ -215,7 +215,9 @@ class Diagnoser:
         await self.ai.refresh(force=True)
         folder = incident_dir(self.cfg.storage, row["id"], from_iso(row["first_trigger_utc"]))
         if not self.ai.usable:
-            self._save(folder, {"available": False, "note": "AI was not available (Ollama or the model is missing)."})
+            why = ("Ollama or the model is missing" if self.ai.local
+                   else (self.ai.remote_message or "the AI service could not be used"))
+            self._save(folder, {"available": False, "note": f"AI was not available ({why})."})
             return None
         evidence = build_evidence(self.db, row, folder)
         frames: list[bytes] = []
@@ -238,7 +240,7 @@ class Diagnoser:
             self.last_error = str(exc)
             self._save(folder, {"available": False, "note": f"The AI could not answer: {exc}"})
             return None
-        result = {"available": True, "model": ai_cfg.model, "created_utc": to_iso(self.clock.now_utc()),
+        result = {"available": True, "model": ai_cfg.active_model, "created_utc": to_iso(self.clock.now_utc()),
                   "pictures": len(frames), "answer": answer,
                   "note": "AI guess from the evidence Guardian saved. It can be wrong."}
         self._save(folder, result)

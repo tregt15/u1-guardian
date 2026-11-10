@@ -90,7 +90,22 @@ What it does:
   and writes what probably happened and what to check. It shows on the incident page and is emailed if email is on.
   It is always marked as an AI guess.
 
-You need a graphics card or a fast computer. A Raspberry Pi is too small for these models. A Pi can use Ollama on
+### Online AI with your own API key
+
+Instead of Ollama you can use an online AI service with your own API key: any OpenAI-compatible service (OpenAI,
+OpenRouter, Groq, Google Gemini's OpenAI-compatible address, and others) or Anthropic (Claude). Pick it on the Settings
+page, type the model name, and put your key in an environment variable (default `GUARDIAN_AI_KEY`) or in the `.env`
+file next to `config.yaml`:
+
+```
+GUARDIAN_AI_KEY=your-key-here
+```
+
+Guardian never saves the key. **Privacy:** with an online service, the camera pictures and printer logs for each check
+go to that company, and it may cost money per check. Local AI keeps everything on your network.
+
+You need a graphics card or a fast computer for local AI. A Raspberry Pi is too small for the local models, but it can
+use an online service or Ollama on another computer. A Pi can use Ollama on
 another computer (set the Ollama address). How well the models judge U1 pictures has not been tested yet.
 
 ### Printer controls

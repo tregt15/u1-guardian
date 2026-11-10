@@ -48,6 +48,10 @@ autopause:
 ai:
   # Local AI through Ollama (https://ollama.com). Off until you turn it on. Nothing goes to the internet.
   enabled: false
+  provider: local             # local (Ollama) | openai (any OpenAI-compatible service) | anthropic
+  # remote_url: https://api.openai.com/v1   # only for openai-compatible services
+  # remote_model: gpt-4o-mini               # needed for openai or anthropic
+  # api_key_env: GUARDIAN_AI_KEY            # put the key itself in this env var or in .env, never here
   ollama_url: http://127.0.0.1:11434
   model: qwen2.5vl:7b         # or gemma3:4b (smaller, faster)
   bed_check: true

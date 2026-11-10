@@ -20,6 +20,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from guardian.ai.ollama import Ollama, OllamaError
+from guardian.ai.remote import RemoteAI, api_key
 from guardian.clock import Clock, to_iso
 from guardian.config import AiConfig
 
@@ -32,6 +33,7 @@ PRINT_CHECK_AFTER_S = 300.0
 CONFIRM_BED_S = 5.0
 CONFIRM_PRINT_S = 10.0
 AVAILABILITY_EVERY_S = 60.0
+REMOTE_CHECK_EVERY_S = 600.0  # a paid service: do not ask it every minute
 
 # Prompts tested on real U1 pictures (2026-11-09). The first version called two normal prints "spaghetti, 0.9".
 # This version answered correctly on those and on an idle picture. Asking for a description first helped.
@@ -74,44 +76,69 @@ def _bool(v: Any) -> bool | None:
 
 
 class AiService:
-    """Shared by the picture checks and the diagnosis: one Ollama, one request at a time."""
+    """Shared by the picture checks and the diagnosis: one AI, one request at a time.
+    Local (Ollama) or a service with an API key, as chosen in settings."""
 
-    def __init__(self, cfg: AiConfig, clock: Clock, ollama: Ollama | None = None) -> None:
+    def __init__(self, cfg: AiConfig, clock: Clock, ollama: Ollama | None = None,
+                 remote_transport=None) -> None:
         self.cfg = cfg
         self.clock = clock
         self.ollama = ollama or Ollama(cfg.ollama_url)
+        self._remote_transport = remote_transport
         self.lock = asyncio.Lock()
         self.ollama_version: str | None = None
         self.model_ready = False
+        self.remote_ok = False
+        self.remote_message: str | None = None
         self._checked_mono: float | None = None
-        self._checked_for: tuple[str, str] | None = None
+        self._checked_for: tuple | None = None
+
+    @property
+    def local(self) -> bool:
+        return self.cfg.provider == "local"
+
+    def remote(self) -> RemoteAI:
+        return RemoteAI(self.cfg.provider, self.cfg.remote_url, api_key(self.cfg.api_key_env), self._remote_transport)
 
     async def refresh(self, force: bool = False) -> None:
         if self.ollama.url != self.cfg.ollama_url:  # the address was changed in settings
             self.ollama = Ollama(self.cfg.ollama_url, self.ollama.transport)
-        key = (self.cfg.ollama_url, self.cfg.model)
+        key = (self.cfg.provider, self.cfg.ollama_url, self.cfg.remote_url, self.cfg.active_model,
+               bool(api_key(self.cfg.api_key_env)))
         now = self.clock.monotonic()
+        every = AVAILABILITY_EVERY_S if self.local else REMOTE_CHECK_EVERY_S
         if not force and self._checked_for == key and self._checked_mono is not None \
-                and now - self._checked_mono < AVAILABILITY_EVERY_S:
+                and now - self._checked_mono < every:
             return
         self._checked_mono, self._checked_for = now, key
-        self.ollama_version = await self.ollama.version()
-        self.model_ready = bool(self.ollama_version) and await self.ollama.has_model(self.cfg.model)
+        if self.local:
+            self.ollama_version = await self.ollama.version()
+            self.model_ready = bool(self.ollama_version) and await self.ollama.has_model(self.cfg.model)
+        else:
+            self.remote_ok, self.remote_message = await self.remote().check(self.cfg.active_model)
 
     @property
     def usable(self) -> bool:
-        return self.cfg.enabled and bool(self.ollama_version) and self.model_ready
+        if not self.cfg.enabled:
+            return False
+        if self.local:
+            return bool(self.ollama_version) and self.model_ready
+        return self.remote_ok
 
     async def ask(self, prompt: str, images: list[bytes] | None = None, *, num_ctx: int = 8192) -> dict:
         async with self.lock:
-            return await self.ollama.chat_json(self.cfg.model, prompt, images, system=SYSTEM,
-                                               timeout=self.cfg.timeout_s, num_ctx=num_ctx)
+            client = self.ollama if self.local else self.remote()
+            return await client.chat_json(self.cfg.active_model, prompt, images, system=SYSTEM,
+                                          timeout=self.cfg.timeout_s, num_ctx=num_ctx)
 
     def status(self) -> dict[str, Any]:
-        return {"enabled": self.cfg.enabled, "ollama_url": self.cfg.ollama_url, "model": self.cfg.model,
-                "ollama_version": self.ollama_version, "ollama_found": bool(self.ollama_version),
-                "model_ready": self.model_ready, "usable": self.usable,
-                "download": self.ollama.pull_state.as_dict()}
+        return {"enabled": self.cfg.enabled, "provider": self.cfg.provider, "model": self.cfg.active_model,
+                "ollama_url": self.cfg.ollama_url, "ollama_version": self.ollama_version,
+                "ollama_found": bool(self.ollama_version), "model_ready": self.model_ready if self.local else self.remote_ok,
+                "remote_url": self.cfg.remote_url if self.cfg.provider == "openai" else None,
+                "api_key_env": self.cfg.api_key_env, "api_key_found": bool(api_key(self.cfg.api_key_env)),
+                "remote_message": None if self.local else self.remote_message,
+                "usable": self.usable, "download": self.ollama.pull_state.as_dict()}
 
 
 ReportFn = Callable[..., Awaitable[Any]]
@@ -250,13 +277,13 @@ class VisionWatcher:
     async def _warm(self) -> None:
         try:
             await self.ai.refresh()
-            if self.ai.usable:
+            if self.ai.usable and self.ai.local:
                 await self.ai.ollama.warm(self.cfg.model)
         except Exception:  # noqa: BLE001 - only a speed-up
             log.info("could not load the AI model ahead of time", exc_info=True)
 
     async def _fire(self, event_type: str, summary: str, frames: list[bytes], a: dict, b: dict) -> None:
-        meta = {"summary": summary, "model": self.cfg.model, "first_answer": a, "second_answer": b,
+        meta = {"summary": summary, "model": self.cfg.active_model, "first_answer": a, "second_answer": b,
                 "note": "AI result. It can be wrong."}
         try:
             result = await self._report(event_type, "guardian_ai", "critical", event_type, meta)

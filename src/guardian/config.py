@@ -222,6 +222,12 @@ class AiConfig(_Section):
     Nothing is sent to the internet: Guardian only talks to the Ollama address below."""
 
     enabled: bool = False
+    # local: Ollama on this or another computer. openai: any OpenAI-compatible service with an API key.
+    # anthropic: Anthropic (Claude) with an API key. With openai or anthropic, pictures and logs go to that company.
+    provider: Literal["local", "openai", "anthropic"] = "local"
+    remote_url: str = "https://api.openai.com/v1"  # for "openai" (change it for OpenRouter, Groq, Gemini, ...)
+    remote_model: str = ""  # the service's model name, for example gpt-4o-mini
+    api_key_env: str = "GUARDIAN_AI_KEY"  # name of the environment variable that holds YOUR key
     ollama_url: str = "http://127.0.0.1:11434"
     model: Literal[tuple(AI_MODELS)] = "qwen2.5vl:7b"  # type: ignore[valid-type]
     bed_check: bool = True  # look at the build plate at the start of a print
@@ -233,9 +239,18 @@ class AiConfig(_Section):
 
     @model_validator(mode="after")
     def _check_url(self) -> AiConfig:
-        if not (self.ollama_url.startswith("http://") or self.ollama_url.startswith("https://")):
-            raise ValueError("ai.ollama_url must start with http:// or https://")
+        for name in ("ollama_url", "remote_url"):
+            if not (getattr(self, name).startswith("http://") or getattr(self, name).startswith("https://")):
+                raise ValueError(f"ai.{name} must start with http:// or https://")
+        if self.enabled and self.provider != "local" and not self.remote_model.strip():
+            raise ValueError("ai.remote_model is needed when the AI service is not local")
+        if not self.api_key_env.replace("_", "").isalnum():
+            raise ValueError("ai.api_key_env must be an environment variable name")
         return self
+
+    @property
+    def active_model(self) -> str:
+        return self.model if self.provider == "local" else self.remote_model.strip()
 
 
 class AutopauseConfig(_Section):

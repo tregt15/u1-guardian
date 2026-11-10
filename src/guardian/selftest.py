@@ -89,7 +89,12 @@ async def run_checks(cfg: Config, transport: httpx.AsyncBaseTransport | None = N
             checks.append(Check("Camera picture", ok, f"{len(r.content) // 1024} KB JPEG" if ok else f"HTTP {r.status_code}"))
         except Exception as exc:  # noqa: BLE001
             checks.append(Check("Camera picture", False, str(exc)))
-    if cfg.ai.enabled:
+    if cfg.ai.enabled and cfg.ai.provider != "local":
+        from guardian.ai.remote import RemoteAI, api_key
+        ok, msg = await RemoteAI(cfg.ai.provider, cfg.ai.remote_url, api_key(cfg.ai.api_key_env), transport).check(
+            cfg.ai.active_model)
+        checks.append(Check("AI service", ok, f"{cfg.ai.provider}, model {cfg.ai.active_model}: {msg}"))
+    elif cfg.ai.enabled:
         from guardian.ai.ollama import Ollama
         o = Ollama(cfg.ai.ollama_url, transport)
         version = await o.version()
