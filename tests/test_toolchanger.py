@@ -240,3 +240,15 @@ async def test_real_end_of_print_park_is_not_a_timeout(tmp_path):
     assert rig.reports == []
     assert rig.mon.status()["good_changes_measured"] == 0  # not used to learn the timeout
     assert rig.db.list_toolchanges(problems_only=True) == []
+
+
+async def test_same_tool_line_is_not_a_change(tmp_path):
+    """Firmware 2.1.0 on the real U1 printed `extruder1 -> extruder1` during a phase offset step. Guardian took
+    it as a change, timed out and paused a good print (2026-11-10)."""
+    rig = Rig(tmp_path, first_time("u1_toolchanges_print2.jsonl"))
+    await rig.status({"toolhead": {"extruder": "extruder1"}})
+    await rig.gcode("// Pausing toolhead to calculate extruder1 phase offset")
+    await rig.gcode("// extruder1 -> extruder1")
+    await rig.status({"extruder1": {"activating_move": True}})
+    await rig.wait(60)
+    assert rig.records() == [] and rig.reports == []

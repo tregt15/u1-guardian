@@ -179,6 +179,11 @@ class ToolchangeMonitor:
 
     async def _gcode(self, line: str) -> None:
         if m := REQUEST_RE.match(line):
+            if m.group(1) == m.group(2):
+                # Firmware 2.1.0 prints `extruder1 -> extruder1` while it "calculates extruder1 phase offset".
+                # Nothing is parked or picked, so it is not a tool change (it falsely paused a real print once).
+                log.info("ignoring same-tool line: %s", line)
+                return
             self._start(m.group(1), m.group(2), how=line)
             return
         if m := ACTIVATED_RE.match(line):
@@ -203,7 +208,9 @@ class ToolchangeMonitor:
             if (TOOL_RE.match(name) and isinstance(fields, dict) and fields.get("activating_move") is True
                     and not any(c.new == name and c.status == "running" for c in self._open)):
                 prev = self.tracker.status.get("toolhead", {}).get("extruder")
-                self._start(prev if prev != name else None, name, how=f"{name}.activating_move = true")
+                if prev == name:
+                    continue  # the tool is already active: not a change (see the same-tool note above)
+                self._start(prev, name, how=f"{name}.activating_move = true")
 
         for ch in list(self._open):
             if ch.status not in ("running", "settling", "late"):
