@@ -130,7 +130,8 @@ class App:
                                                 "selftest": self.run_selftest,
                                                 "control": self.printer_control,
                                                 "latest_frame": self._latest_frame,
-                                                "set_ai_key": self.set_ai_key}))
+                                                "set_ai_key": self.set_ai_key,
+                                                "cancel_autopause": self.autopause.cancel}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.connected", self._on_reconnect)
@@ -313,6 +314,7 @@ class App:
             "toolchanger": self.toolchanger.status(),
             "autopause": self.autopause.status(),
             "controls": {"enabled": self.cfg.controls.enabled},
+            "blackbox": {"pre_s": self.cfg.blackbox.pre_trigger_s, "post_s": self.cfg.blackbox.post_trigger_s},
             "selftest": {
                 "ok": self.selftest_result["ok"] if self.selftest_result else None,
                 "ran_utc": self.selftest_result["ran_utc"] if self.selftest_result else None,

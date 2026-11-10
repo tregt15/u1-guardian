@@ -1,0 +1,260 @@
+// The page frame from the Halo design: header, navigation, connection light, banners, plus the shared words
+// (event labels, badges) every page uses. Each page calls Shell.start("dashboard" | "incidents" | ...).
+
+const LABELS = {
+  print_paused_with_exception: "Print paused by a printer error",
+  print_paused: "Print paused",
+  print_error: "Print error",
+  print_cancelled: "Print stopped",
+  printer_exception: "Printer error",
+  klipper_error_response: "Printer error message",
+  klippy_shutdown: "Printer firmware stopped",
+  klippy_disconnected: "Printer firmware stopped",
+  filament_feed_error: "Filament feed problem",
+  bed_not_clear: "Printer camera check: plate not clear",
+  spaghetti_detected: "Printer camera check: spaghetti",
+  residue_detected: "Printer camera check: residue",
+  dirty_nozzle_detected: "Printer camera check: dirty nozzle",
+  ai_bed_not_clear: "Guardian AI: plate not clear",
+  ai_print_failure: "Guardian AI: print failure",
+  toolchange_timeout: "Tool change: stuck",
+  toolchange_wrong_tool: "Tool change: wrong tool",
+  toolchange_bad_state: "Tool change: odd tool state",
+  toolchange_error: "Tool change: printer error",
+  toolchange_slowing: "Tool change: getting slower",
+  print_stalled: "Print stopped moving",
+  heater_not_reaching: "Heater cannot reach temperature",
+  heater_temperature_drop: "Heater temperature dropped",
+  manual: "Saved by hand",
+  camera_stop_warning: "Camera stopping soon",
+  camera_stopped: "Camera off",
+  camera_started: "Camera on",
+  autopause_armed: "Auto pause armed",
+  autopause_cancelled: "Auto pause cancelled",
+  autopause_not_needed: "Printer paused by itself",
+  autopause_failed: "Auto pause could not reach the printer",
+  guardian_paused_print: "Guardian paused the print",
+  ai_diagnosis: "AI diagnosis written",
+};
+// Page titles for an incident (a little friendlier than the list labels).
+const TITLES = {
+  toolchange_timeout: "Tool change got stuck", toolchange_wrong_tool: "Tool change ended on the wrong tool",
+  toolchange_bad_state: "Tool change ended in an odd state", toolchange_error: "Printer error during a tool change",
+  toolchange_slowing: "Tool changes are getting slower", print_stalled: "The print stopped moving",
+  manual: "Footage saved by hand",
+};
+function label(t) { return LABELS[t] || (t || "unknown").replace(/_/g, " "); }
+function title(t) { return TITLES[t] || label(t); }
+
+const SOURCES = { moonraker: "Printer", klipper: "Printer", printer_camera: "Note from Guardian", guardian: "Guardian",
+  toolchanger: "Guardian", guardian_ai: "Guardian AI", snapmaker_ai: "Printer camera check", manual: "You" };
+function source(s) { return SOURCES[s] || s || "unknown"; }
+
+function tool(name) {
+  if (!name) return "unknown";
+  if (name === "extruder") return "T0";
+  const m = /^extruder(\d+)$/.exec(name);
+  return m ? "T" + m[1] : name;
+}
+
+const SEV = {
+  critical: { tone: "t-crit", text: "Critical", icon: "i-alert", cls: "solid" },
+  warning: { tone: "t-warn", text: "Warning", icon: "i-alert", cls: "" },
+  info: { tone: "t-info", text: "Info", icon: "i-info", cls: "" },
+};
+const REC = {
+  complete: { tone: "t-ok", text: "Complete", icon: "i-check" },
+  partial: { tone: "t-warn", text: "Partial", icon: "i-alert" },
+  missing: { tone: "t-crit", text: "Missing", icon: "i-off" },
+  failed: { tone: "t-crit", text: "Failed", icon: "i-x" },
+  recording: { tone: "t-info", text: "Recording", icon: null },
+};
+
+// A badge: tone like "t-ok", an icon name (or null), the text, extra classes.
+function badge(tone, icon, text, cls) {
+  return el("span", { class: "badge " + tone + (cls ? " " + cls : "") }, icon ? ic(icon) : null, text);
+}
+function sevBadge(sev, big) {
+  const s = SEV[sev] || SEV.info;
+  return badge(s.tone, s.icon, s.text, (s.cls + (big ? " lg" : "")).trim());
+}
+function recBadge(status) {
+  const r = REC[status] || { tone: "t-muted", text: status || "unknown", icon: "i-info" };
+  return el("span", { class: "badge " + r.tone }, status === "recording" ? el("span", { class: "dot pulse" }) : ic(r.icon), r.text);
+}
+
+// The Halo logo (inline, so it follows the theme colors).
+function logo() {
+  const s = el("svg", { class: "g-logo", viewBox: "0 0 48 48", fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round",
+    style: "color:var(--primary)", "aria-hidden": "true" });
+  s.append(el("ellipse", { cx: 24, cy: 7, rx: 9, ry: 3.2, style: "stroke:var(--halo)", "stroke-width": 2.6 }));
+  const g = el("g", { stroke: "currentColor", "stroke-width": 2.6 });
+  for (const d of ["M17 37.4Q21.6 43.2 24 44Q26.4 43.2 31 37.4", "M13 27.6Q20.1 36.7 24 38Q27.9 36.7 35 27.6",
+    "M9 17.8Q18.8 30.2 24 32Q29.2 30.2 39 17.8", "M5 7.9Q17.4 23.7 24 26Q30.6 23.7 43 7.9"]) g.append(el("path", { d }));
+  s.append(g);
+  return s;
+}
+
+// A small modal dialog. Returns a promise: true for OK, false for Cancel. `typed` asks the user to type a word.
+function ask(message, { ok = "OK", danger = false, typed = null } = {}) {
+  return new Promise((resolve) => {
+    const input = typed ? el("input", { class: "input", type: "text", "aria-label": "Type " + typed, autocomplete: "off" }) : null;
+    const okBtn = el("button", { type: "button", class: "btn " + (danger ? "btn-danger" : "btn-primary") }, ok);
+    const close = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+    const dlg = el("dialog", { class: "g-dialog" },
+      el("p", {}, message),
+      typed ? el("p", { class: "small muted" }, "Type " + typed + " to confirm.") : null,
+      input,
+      el("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+        el("button", { type: "button", class: "btn btn-secondary", onclick: () => close(false) }, "Cancel"), okBtn));
+    okBtn.addEventListener("click", () => {
+      if (typed && input.value.trim().toUpperCase() !== typed) { input.focus(); return; }
+      close(true);
+    });
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(false); });
+    document.querySelector(".g-app").append(dlg);
+    dlg.showModal();
+    (input || okBtn).focus();
+  });
+}
+
+// A short message at the bottom of the screen.
+function toast(text, tone) {
+  const t = el("div", { class: "g-toast banner " + (tone || "t-info"), role: "status" }, el("div", { class: "b-text" }, text));
+  document.querySelector(".g-app").append(t);
+  setTimeout(() => t.remove(), 4500);
+}
+
+// Printer controls, shared by the dashboard and the incident page.
+async function printerControl(action) {
+  if (action === "cancel") {
+    if (!await ask("Stop the print for good? It cannot be resumed after this.", { ok: "Stop print", danger: true, typed: "STOP" })) return false;
+  } else if (action === "resume") {
+    if (!await ask("Resume the print? Look at the printer and the build plate first.", { ok: "Resume print" })) return false;
+  } else if (!await ask("Pause the print?", { ok: "Pause" })) return false;
+  try {
+    await api("/api/printer/" + action, { method: "POST", body: JSON.stringify({ confirm: true }) });
+    toast(action === "pause" ? "Pause sent to the printer." : action === "resume" ? "Resume sent to the printer." : "Stop sent to the printer.", "t-ok");
+    return true;
+  } catch (e) { toast("Not sent: " + e.message, "t-crit"); return false; }
+}
+
+const Shell = {
+  status: null,
+  _subs: [],
+  onStatus(fn) { this._subs.push(fn); if (this.status) fn(this.status); },
+
+  start(active) {
+    const app = document.querySelector(".g-app");
+    // Theme: follows the system unless ?theme=light|dark|auto is in the address (remembered after that).
+    const want = new URLSearchParams(location.search).get("theme");
+    if (["light", "dark", "auto"].includes(want)) store.set("guardian_theme", want);
+    app.setAttribute("data-theme", store.get("guardian_theme") || "auto");
+    const nav = [["dashboard", "/", "i-grid", "Dashboard"], ["incidents", "/incidents", "i-list", "Incidents"],
+      ["toolchanges", "/toolchanges", "i-swap", "Tool changes"], ["settings", "/settings", "i-sliders", "Settings"]];
+    this.conn = el("span", { class: "conn t-muted" }, el("span", { class: "dot hollow" }),
+      el("span", { class: "lbl-wide" }, "Connecting"), el("span", { class: "lbl-short" }, "..."));
+    const header = el("header", { class: "g-header" }, el("div", { class: "g-header-in" },
+      el("a", { class: "g-brand", href: "/" }, logo(), el("span", { class: "g-wordmark" }, "U1 Guardian")),
+      el("nav", { class: "g-nav", "aria-label": "Main" }, ...nav.map(([id, href, icon, text]) =>
+        el("a", { href, "aria-current": id === active ? "page" : null }, ic(icon), text))),
+      el("div", { class: "g-actions" }, this.conn,
+        el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: () => this.saveNow() },
+          ic("i-bookmark", "sm"), el("span", { class: "lbl-wide" }, "Save incident now"), el("span", { class: "lbl-short" }, "Save")))));
+    this.banners = el("div", { class: "g-banners", hidden: true });
+    this.main = el("main", { class: "g-page" });
+    app.replaceChildren(header, this.banners, this.main);
+    this.poll();
+    setInterval(() => this.poll(), 5000);
+    return this.main;
+  },
+
+  async poll() {
+    try {
+      const s = await api("/api/status");
+      this.status = s;
+      this.drawConn(s.printer || {});
+      this.drawBanners(s);
+      for (const fn of this._subs) { try { fn(s); } catch (e) { console.error(e); } }
+    } catch (e) {
+      this.drawConn(null, e.message);
+    }
+  },
+
+  drawConn(p, err) {
+    const ok = p && p.connected;
+    const long = err ? "Guardian not reachable" : ok ? "Printer connected" : "Printer not connected";
+    this.conn.className = "conn " + (ok ? "t-ok" : "t-crit");
+    this.conn.replaceChildren(el("span", { class: "dot" + (ok ? "" : " hollow") }),
+      el("span", { class: "lbl-wide" }, long), el("span", { class: "lbl-short" }, ok ? "Online" : "Offline"));
+  },
+
+  // Notices from /api/status (brief section 7). Shown on every page.
+  drawBanners(s) {
+    const c = s.camera || {}, p = s.printer || {}, t = s.selftest || {}, st = s.storage || {};
+    const em = (s.notifications || {}).email || {};
+    const printing = ["printing", "paused"].includes(p.print_state);
+    const list = [];
+    if (!p.connected) list.push(["t-crit", "i-wifi-off", "Guardian cannot reach the printer.",
+      "Nothing is being checked or saved. Make sure the printer is on and on the same network as this computer."]);
+    if (c.stops_in_s != null) list.push(["t-info", "i-camera", "The printer will stop the camera in " + c.stops_in_s + " s.",
+      c.keepalive_active ? "Guardian will turn it back on right away so the footage keeps going."
+        : "Auto camera is not active, so keep the camera view open in the Snapmaker app to keep footage coming."]);
+    if (c.mode === "snapshot" && !c.viewer_active && printing && !c.keepalive_active)
+      list.push(["t-warn", "i-camera-off", "No new camera pictures.", "Auto camera is off, so pictures only come while the Snapmaker app shows the camera view."]);
+    if (c.mode === "snapshot" && !c.viewer_active && c.keepalive_active && c.keepalive_last_utc &&
+      (Date.now() - new Date(c.keepalive_last_utc).getTime()) > 30000)
+      list.push(["t-warn", "i-camera-off", "Guardian asked the printer to turn the camera on, but no picture came yet.", "Last try " + ago(c.keepalive_last_utc) + "."]);
+    if (t.firmware_changed) list.push(["t-info", "i-info", "The printer firmware changed.",
+      "Guardian's checks were made on " + t.firmware_changed[0] + ". The printer now runs " + t.firmware_changed[1] + ". Run the self-test in Settings."]);
+    if (t.ok === false) list.push(["t-warn", "i-alert", "The self-test found problems.", (t.problems || []).map(x => x.name + ": " + x.detail).join(". ")]);
+    for (const w of st.warnings || []) list.push(["t-warn", "i-disk", "Storage", w]);
+    if (em.enabled && !em.configured) list.push(["t-warn", "i-mail", "Email alerts are on, but no Resend API key was found.", "Alerts will not be sent until a key is set."]);
+    this.banners.hidden = list.length === 0;
+    this.banners.replaceChildren(...list.map(([tone, icon, head, text]) =>
+      el("div", { class: "banner " + tone, role: "status" }, ic(icon),
+        el("div", { class: "grow" }, el("div", { class: "b-title" }, head), el("div", { class: "b-text" }, text)))));
+  },
+
+  async saveNow() {
+    const note = prompt("Save the footage around now as an incident. Optional note:", "");
+    if (note === null) return;
+    try {
+      const r = await api("/api/incidents", { method: "POST", body: JSON.stringify({ note: note || null }) });
+      toast(r.action === "created" ? "Incident saved. The clip is ready after the post-roll." : "Added to the open incident.", "t-ok");
+    } catch (e) { toast("Could not save: " + e.message, "t-crit"); }
+  },
+};
+
+// One incident row from the design (dashboard and incidents list).
+function incidentRow(i) {
+  const note = i.recording_status === "recording" ? "The clip is ready soon."
+    : i.recording_status !== "complete" && i.recording_notes ? i.recording_notes : "";
+  return el("a", { class: "irow", href: "/incident?uid=" + encodeURIComponent(i.uid) },
+    el("div", { class: "c-when" }, friendlyTime(i.first_trigger_utc)),
+    el("div", { class: "c-what" },
+      el("div", { class: "what-t" }, label(i.event_type),
+        i.protected ? el("span", { class: "lockmark", title: "Protected. Never deleted automatically." }, ic("i-lock", "sm"),
+          el("span", { class: "sr" }, "Protected")) : null),
+      el("div", { class: "what-s" }, el("span", {}, source(i.source)), el("span", { class: "raw-n" }, i.event_type))),
+    el("div", { class: "c-sev" }, sevBadge(i.severity)),
+    el("div", { class: "c-print" }, el("div", { class: "fname" }, i.print_filename || "No print running"),
+      i.print_progress != null ? el("div", { class: "muted tiny" }, i.print_progress + "% done") : null),
+    el("div", { class: "c-rec" }, recBadge(i.recording_status), note ? el("div", { class: "rec-note" }, note) : null),
+    el("div", { class: "c-go" }, ic("i-chev-r")));
+}
+function incidentHead() {
+  return el("div", { class: "irow head", "aria-hidden": "true" }, el("div", { class: "c-when" }, "When"),
+    el("div", { class: "c-what" }, "What happened"), el("div", { class: "c-sev" }, "Severity"), el("div", { class: "c-print" }, "Print"),
+    el("div", { class: "c-rec" }, "Footage"), el("div", { class: "c-go" }));
+}
+
+// If part of a page breaks, say so instead of failing quietly.
+function showPageError(msg) {
+  const app = document.querySelector(".g-app");
+  if (!app || document.getElementById("page-error")) return;
+  app.append(el("div", { id: "page-error", class: "g-toast banner t-crit", role: "alert" }, ic("i-alert"),
+    el("div", {}, el("div", { class: "b-title" }, "Part of this page did not load."), el("div", { class: "b-text" }, String(msg).slice(0, 300)))));
+}
+window.addEventListener("error", (e) => showPageError(e.message));
+window.addEventListener("unhandledrejection", (e) => showPageError((e.reason && (e.reason.stack || e.reason.message)) || e.reason));

@@ -1,4 +1,4 @@
-// Shared helpers. No framework, no build step.
+// Shared helpers. No framework, no build step, nothing loaded from the internet.
 // All text from the server goes in as plain text nodes, never as markup.
 
 const store = {
@@ -7,6 +7,7 @@ const store = {
 };
 
 function token() { return store.get("guardian_token") || ""; }
+function tokenQuery(sep) { return token() ? (sep || "?") + "token=" + encodeURIComponent(token()) : ""; }
 
 async function api(path, opts = {}) {
   const headers = Object.assign({}, opts.headers || {});
@@ -26,12 +27,16 @@ async function api(path, opts = {}) {
   return resp.json();
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+const SVG_TAGS = new Set(["svg", "use", "circle", "path", "line", "text", "g", "rect", "ellipse"]);
+
 function el(tag, attrs, ...kids) {
-  const n = document.createElement(tag);
+  const n = SVG_TAGS.has(tag) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === "class") n.className = v;
-    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v);
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") n.setAttribute("class", v);
+    else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? "" : v);
   }
   for (const kid of kids.flat()) {
     if (kid === null || kid === undefined || kid === false) continue;
@@ -40,30 +45,46 @@ function el(tag, attrs, ...kids) {
   return n;
 }
 
-function badge(text, kind) { return el("span", { class: "badge b-" + kind }, text); }
-
-const STATUS_KIND = { complete: "ok", recording: "info", partial: "warn", missing: "bad", failed: "bad" };
-const SEVERITY_KIND = { info: "info", warning: "warn", critical: "bad" };
-
-function localTime(iso) {
-  if (!iso) return "unknown";
-  const d = new Date(iso);
-  return isNaN(d) ? iso : d.toLocaleString() + " (" + iso.replace("T", " ").replace("Z", " UTC") + ")";
+// An icon from /static/icons.svg (the Halo design icons).
+function ic(name, cls) {
+  return el("svg", { class: "ic" + (cls ? " " + cls : ""), "aria-hidden": "true" },
+    el("use", { href: "/static/icons.svg#" + name }));
 }
-function shortTime(iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
-function secs(s) { return (s === null || s === undefined) ? "?" : Number(s).toFixed(1) + " s"; }
-function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+// ---- time ----
+function parseTime(iso) { const d = new Date(iso); return isNaN(d) ? null : d; }
+function clock(d, withSec) {
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: withSec ? "2-digit" : undefined });
+}
+// "Today 9:12 AM", "Yesterday 4:40 PM", "Mon 7:56 PM", or a date for older ones.
+function friendlyTime(iso, withSec) {
+  const d = parseTime(iso);
+  if (!d) return "unknown";
+  const now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86400000);
+  const t = clock(d, withSec);
+  if (diff === 0) return "Today " + t;
+  if (diff === 1) return "Yesterday " + t;
+  if (diff > 1 && diff < 7) return d.toLocaleDateString([], { weekday: "short" }) + " " + t;
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: diff > 300 ? "numeric" : undefined }) + " " + t;
+}
 function ago(iso) {
-  if (!iso) return "never";
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  return s < 90 ? Math.round(s) + " s ago" : s < 5400 ? Math.round(s / 60) + " min ago" : Math.round(s / 3600) + " h ago";
+  const d = parseTime(iso);
+  if (!d) return "never";
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 90) return Math.max(0, Math.round(s)) + " s ago";
+  if (s < 5400) return Math.round(s / 60) + " min ago";
+  if (s < 86400 * 2) return Math.round(s / 3600) + " h ago";
+  return friendlyTime(iso);
 }
+function secs(s, digits) { return (s === null || s === undefined) ? "unknown" : Number(s).toFixed(digits ?? 1) + " s"; }
+function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
 
 function listen(onEvent) {
   // Server-sent events for live updates. EventSource cannot send headers, so the token goes in the URL.
   try {
-    const url = "/api/events/stream" + (token() ? "?token=" + encodeURIComponent(token()) : "");
-    const es = new EventSource(url);
+    const es = new EventSource("/api/events/stream" + tokenQuery());
     for (const t of ["incident.created", "incident.merged", "incident.finalized", "printer.connected", "printer.disconnected"]) {
       es.addEventListener(t, onEvent);
     }

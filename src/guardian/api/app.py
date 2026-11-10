@@ -184,6 +184,7 @@ def create_app(ctx: ApiContext) -> FastAPI:
         from_: str | None = Query(None, alias="from", max_length=40),
         to: str | None = Query(None, max_length=40),
         q: str | None = Query(None, max_length=200),
+        group: Literal["toolchange", "printer", "camera", "ai", "manual"] | None = None,
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
     ) -> dict:
@@ -194,7 +195,7 @@ def create_app(ctx: ApiContext) -> FastAPI:
                 except ValueError:
                     raise HTTPException(422, f"'{label}' must be an ISO time like 2026-11-08T12:00:00Z") from None
         rows, total = db.query_incidents(event_type=type, severity=severity, since=from_, until=to,
-                                         q=q, limit=limit, offset=offset)
+                                         q=q, group=group, limit=limit, offset=offset)
         return {"total": total, "limit": limit, "offset": offset, "incidents": [summary(r) for r in rows]}
 
     @app.get("/api/incidents/{uid}", dependencies=[Depends(auth)])
@@ -484,6 +485,19 @@ def create_app(ctx: ApiContext) -> FastAPI:
             out.append(item)
         return {"toolchanges": out, "counts": db.toolchange_stats()}
 
+    @app.get("/api/toolchanges/summary", dependencies=[Depends(auth)])
+    async def toolchange_summary() -> dict:
+        return db.toolchange_summary()
+
+    @app.post("/api/autopause/cancel", dependencies=[Depends(auth)])
+    async def autopause_cancel() -> dict:
+        fn = ctx.extra.get("cancel_autopause")
+        if fn is None:
+            raise HTTPException(409, "not available in this mode")
+        if not await fn():
+            raise HTTPException(409, "No pause is waiting right now.")
+        return {"cancelled": True}
+
     @app.get("/api/settings", dependencies=[Depends(auth)])
     async def get_settings() -> dict:
         return {"fields": settings_mod.FIELDS, "values": settings_mod.current(cfg),
@@ -548,6 +562,14 @@ def create_app(ctx: ApiContext) -> FastAPI:
         @app.get("/", include_in_schema=False)
         async def index():
             return FileResponse(WEB_DIR / "index.html")
+
+        @app.get("/incidents", include_in_schema=False)
+        async def incidents_page() -> FileResponse:
+            return FileResponse(WEB_DIR / "incidents.html")
+
+        @app.get("/toolchanges", include_in_schema=False)
+        async def toolchanges_page() -> FileResponse:
+            return FileResponse(WEB_DIR / "toolchanges.html")
 
         @app.get("/settings", include_in_schema=False)
         async def settings_page() -> FileResponse:

@@ -70,6 +70,17 @@ class AutoPause:
             "summary": f"Guardian will pause the print in {self.cfg.grace_s:g} s unless the printer pauses itself.",
         })
 
+    async def cancel(self) -> bool:
+        """The person clicked "Cancel this pause" on the dashboard. True if one was pending."""
+        if self._pending is None:
+            return False
+        reasons = "; ".join(self._pending.reasons)
+        self._pending = None
+        log.warning("auto pause cancelled from the dashboard (%s)", reasons)
+        await self._say("autopause_cancelled", {"summary": "You cancelled this pause from the dashboard.",
+                                                "reason": reasons})
+        return True
+
     async def tick(self) -> None:
         p = self._pending
         if p is None or self.clock.monotonic() < p.deadline:

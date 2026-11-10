@@ -1,0 +1,27 @@
+/* Small additions to the Halo design (guardian.css) for the live app. guardian.css itself is a copy of the design. */
+
+/* Real camera pictures and video where the design shows example drawings. */
+.cam img.live, .screen video, .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; background: #1E222B; }
+.screen video { object-fit: contain; }
+.thumb img { aspect-ratio: 16/9; height: auto; }
+.cam-tag.stale .dot { background: #FFC46B; animation: none; }
+
+/* Confirm dialog and toast. */
+.g-dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text);
+  padding: 22px; max-width: min(92vw, 460px); box-shadow: var(--shadow); }
+.g-dialog::backdrop { background: rgba(12, 16, 31, .45); }
+.g-dialog p { margin: 0 0 6px; }
+.g-dialog .input { width: 100%; }
+.g-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; max-width: min(92vw, 520px);
+  box-shadow: var(--shadow); }
+
+/* Picture viewer for AI pictures. */
+.g-viewer img { max-width: min(90vw, 1100px); max-height: 80vh; display: block; border-radius: 10px; }
+.g-viewer { padding: 12px; }
+
+/* Things the design draws but leaves to the app. */
+.hidden { display: none !important; }
+.right-al { margin-left: auto; }
+
+/* The design sets display on many parts, which beats the hidden attribute. Hidden must always win. */
+[hidden] { display: none !important; }

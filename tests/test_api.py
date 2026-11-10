@@ -233,8 +233,9 @@ def test_toolchanges_list_and_problem_filter(tmp_path):
 
 def test_dashboard_pages_are_served(tmp_path):
     env = make_env(tmp_path)
-    for path, needle in (("/", "U1 Guardian"), ("/incident", "Incident"), ("/static/common.js", "createTextNode"),
-                         ("/static/style.css", "--bg")):
+    for path, needle in (("/", "U1 Guardian"), ("/incident", "Incident"), ("/incidents", "Incidents"),
+                         ("/toolchanges", "Tool changes"), ("/settings", "Settings"), ("/static/common.js", "createTextNode"),
+                         ("/static/guardian.css", "--bg"), ("/static/icons.svg", "i-alert"), ("/static/shell.js", "Shell")):
         r = env.client.get(path)
         assert r.status_code == 200 and needle in r.text, path
     assert env.client.get("/").headers["x-content-type-options"] == "nosniff"
@@ -301,3 +302,36 @@ def test_camera_stream_sends_jpeg_parts(tmp_path):
     r = env.client.get("/api/camera/stream")
     assert r.status_code == 200 and r.headers["content-type"].startswith("multipart/x-mixed-replace")
     assert r.content.count(b"--frame") == 1 and b"\xff\xd8jpeg" in r.content  # same picture is sent once
+
+
+
+def test_incident_groups_and_autopause_cancel(tmp_path):
+    env = make_env(tmp_path)
+    add_incident(env, 1, event_type="toolchange_timeout")
+    add_incident(env, 2, event_type="manual", severity="info")
+    add_incident(env, 3, event_type="ai_print_failure")
+    types = lambda g: [i["event_type"] for i in env.client.get("/api/incidents?group=" + g).json()["incidents"]]
+    assert types("toolchange") == ["toolchange_timeout"] and types("manual") == ["manual"] and types("ai") == ["ai_print_failure"]
+    assert env.client.get("/api/incidents?group=nope").status_code == 422
+    assert env.client.post("/api/autopause/cancel").status_code == 409
+    calls = []
+
+    async def cancel():
+        calls.append(1)
+        return len(calls) == 1
+
+    env.ctx.extra["cancel_autopause"] = cancel
+    env.client = TestClient(create_app(env.ctx))
+    assert env.client.post("/api/autopause/cancel").json() == {"cancelled": True}
+    assert env.client.post("/api/autopause/cancel").status_code == 409  # nothing waiting any more
+
+
+def test_toolchange_summary_for_the_last_print(tmp_path):
+    env = make_env(tmp_path)
+    for i, (f, res, ms) in enumerate([("old.gcode", "ok", 4000), ("new.gcode", "ok", 3800), ("new.gcode", "timeout", None),
+                                      ("new.gcode", "ok", 4200)]):
+        env.db.create_toolchange(print_filename=f, previous_tool="extruder", requested_tool="extruder1",
+                                 started_utc=f"2026-11-10T08:00:0{i}.000Z", result=res, duration_ms=ms)
+    s = env.client.get("/api/toolchanges/summary").json()
+    assert s["print_filename"] == "new.gcode" and s["total"] == 3 and s["counts"] == {"ok": 2, "timeout": 1}
+    assert s["median_ms"] == 4200 and s["slowest_recent"]["duration_ms"] == 4200 and len(s["points"]) == 3

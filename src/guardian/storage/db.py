@@ -25,6 +25,17 @@ _INCIDENT_COLUMNS = {
 }
 
 
+# Groups for the incident list filter. A trailing * means "starts with".
+INCIDENT_GROUPS = {
+    "toolchange": ["toolchange_*"],
+    "printer": ["print_paused_with_exception", "print_paused", "print_error", "print_cancelled", "printer_exception",
+                "klipper_error_response", "klippy_*", "filament_feed_error", "heater_*", "print_stalled"],
+    "camera": ["bed_not_clear", "spaghetti_detected", "residue_detected", "dirty_nozzle_detected"],
+    "ai": ["ai_*"],
+    "manual": ["manual"],
+}
+
+
 class Database:
     def __init__(self, path: Path | str, clock: Clock | None = None) -> None:
         self.path = Path(path) if str(path) != ":memory:" else path
@@ -105,12 +116,24 @@ class Database:
 
     def query_incidents(self, *, event_type: str | None = None, severity: str | None = None,
                         since: str | None = None, until: str | None = None, q: str | None = None,
+                        group: str | None = None,
                         limit: int = 50, offset: int = 0) -> tuple[list[sqlite3.Row], int]:
         """Filtered list, newest first. Returns (rows, total count). All values are bound
         parameters, never pasted into the SQL."""
         where, args = [], []
         if event_type:
             where.append("event_type = ?"); args.append(event_type)
+        if group:
+            types = INCIDENT_GROUPS.get(group)
+            if types is None:
+                raise ValueError(f"unknown group {group!r}")
+            prefixes = [t[:-1] for t in types if t.endswith("*")]
+            exact = [t for t in types if not t.endswith("*")]
+            parts = [f"event_type IN ({','.join('?' * len(exact))})"] if exact else []
+            args += exact
+            for pre in prefixes:
+                parts.append("event_type LIKE ? ESCAPE '!'"); args.append(pre.replace("_", "!_") + "%")
+            where.append("(" + " OR ".join(parts) + ")")
         if severity:
             where.append("severity = ?"); args.append(severity)
         if since:
@@ -182,6 +205,30 @@ class Database:
                 " AND requested_tool = ? AND previous_tool IS ? ORDER BY started_utc DESC, id DESC LIMIT ?",
                 (requested, previous, limit)).fetchall()
         return [int(r["duration_ms"]) for r in rows]
+
+    def toolchange_summary(self, points: int = 500) -> dict[str, Any]:
+        """Numbers for the Tool changes page: the last print's changes, counts and chart points."""
+        with self._lock:
+            last = self._conn.execute(
+                "SELECT print_filename FROM toolchange_records WHERE print_filename IS NOT NULL"
+                " ORDER BY started_utc DESC, id DESC LIMIT 1").fetchone()
+            name = last["print_filename"] if last else None
+            if name:
+                rows = self._conn.execute(
+                    "SELECT started_utc, previous_tool, requested_tool, duration_ms, result FROM toolchange_records"
+                    " WHERE print_filename = ? ORDER BY started_utc DESC, id DESC LIMIT ?", (name, points)).fetchall()
+                counts = self._conn.execute(
+                    "SELECT result, COUNT(*) AS n FROM toolchange_records WHERE print_filename = ? GROUP BY result",
+                    (name,)).fetchall()
+            else:
+                rows, counts = [], []
+        pts = [dict(r) for r in reversed(rows)]
+        ok = sorted(p["duration_ms"] for p in pts if p["result"] == "ok" and p["duration_ms"])
+        recent = [p for p in pts[-50:] if p["duration_ms"] and p["result"] == "ok"]
+        slowest = max(recent, key=lambda p: p["duration_ms"]) if recent else None
+        return {"print_filename": name, "total": sum(int(c["n"]) for c in counts),
+                "counts": {(c["result"] or "open"): int(c["n"]) for c in counts},
+                "median_ms": ok[len(ok) // 2] if ok else None, "slowest_recent": slowest, "points": pts}
 
     def toolchange_stats(self) -> dict[str, Any]:
         with self._lock:

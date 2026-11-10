@@ -102,3 +102,12 @@ async def test_zero_grace_pauses_on_next_tick():
     await rig.ap.on_trigger("spaghetti_detected")
     await rig.ap.tick()
     assert rig.sent == 1
+
+
+async def test_cancel_from_the_dashboard():
+    rig = Rig()
+    assert await rig.ap.cancel() is False
+    await rig.ap.on_trigger("toolchange_timeout")
+    assert await rig.ap.cancel() is True
+    await rig.run(15)
+    assert rig.sent == 0 and rig.notes == ["autopause_armed", "autopause_cancelled"]
