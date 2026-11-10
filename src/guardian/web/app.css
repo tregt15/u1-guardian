@@ -25,3 +25,9 @@
 
 /* The design sets display on many parts, which beats the hidden attribute. Hidden must always win. */
 [hidden] { display: none !important; }
+
+/* The design rotates the ring drawing so progress starts at the top. The icon in the middle must stay upright. */
+.ring .r-mid svg.ic { transform: none; width: 40px; height: 40px; }
+
+/* Theme switch in the header. */
+.theme-btn .ic { color: var(--halo-ink); }

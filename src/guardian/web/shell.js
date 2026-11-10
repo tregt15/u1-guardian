@@ -139,6 +139,8 @@ async function printerControl(action) {
   } catch (e) { toast("Not sent: " + e.message, "t-crit"); return false; }
 }
 
+const THEMES = ["auto", "light", "dark"];  // auto follows the computer's setting
+
 const Shell = {
   status: null,
   _subs: [],
@@ -148,8 +150,8 @@ const Shell = {
     const app = document.querySelector(".g-app");
     // Theme: follows the system unless ?theme=light|dark|auto is in the address (remembered after that).
     const want = new URLSearchParams(location.search).get("theme");
-    if (["light", "dark", "auto"].includes(want)) store.set("guardian_theme", want);
-    app.setAttribute("data-theme", store.get("guardian_theme") || "auto");
+    if (THEMES.includes(want)) store.set("guardian_theme", want);
+    app.setAttribute("data-theme", this.theme());
     const nav = [["dashboard", "/", "i-grid", "Dashboard"], ["incidents", "/incidents", "i-list", "Incidents"],
       ["toolchanges", "/toolchanges", "i-swap", "Tool changes"], ["settings", "/settings", "i-sliders", "Settings"]];
     this.conn = el("span", { class: "conn t-muted" }, el("span", { class: "dot hollow" }),
@@ -158,15 +160,30 @@ const Shell = {
       el("a", { class: "g-brand", href: "/" }, logo(), el("span", { class: "g-wordmark" }, "U1 Guardian")),
       el("nav", { class: "g-nav", "aria-label": "Main" }, ...nav.map(([id, href, icon, text]) =>
         el("a", { href, "aria-current": id === active ? "page" : null }, ic(icon), text))),
-      el("div", { class: "g-actions" }, this.conn,
-        el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: () => this.saveNow() },
-          ic("i-bookmark", "sm"), el("span", { class: "lbl-wide" }, "Save incident now"), el("span", { class: "lbl-short" }, "Save")))));
+      el("div", { class: "g-actions" }, this.conn, this.themeBtn = el("button", { type: "button", class: "btn btn-secondary btn-sm theme-btn",
+        onclick: () => this.setTheme(THEMES[(THEMES.indexOf(this.theme()) + 1) % THEMES.length]) }))));
+    this.drawThemeBtn();
     this.banners = el("div", { class: "g-banners", hidden: true });
     this.main = el("main", { class: "g-page" });
     app.replaceChildren(header, this.banners, this.main);
     this.poll();
     setInterval(() => this.poll(), 5000);
     return this.main;
+  },
+
+  theme() { const t = store.get("guardian_theme"); return THEMES.includes(t) ? t : "auto"; },
+  setTheme(t) {
+    store.set("guardian_theme", t);
+    document.querySelector(".g-app").setAttribute("data-theme", t);
+    this.drawThemeBtn();
+  },
+  drawThemeBtn() {
+    const t = this.theme();
+    const [icon, text] = { auto: ["i-theme-auto", "Auto"], light: ["i-sun", "Light"], dark: ["i-moon", "Dark"] }[t];
+    const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
+    this.themeBtn.setAttribute("aria-label", "Theme: " + text + ". Click for " + next + ".");
+    this.themeBtn.setAttribute("title", "Theme: " + text + " (click to change)");
+    this.themeBtn.replaceChildren(ic(icon, "sm"), el("span", { class: "lbl-wide" }, "Theme: " + text));
   },
 
   async poll() {
@@ -214,15 +231,6 @@ const Shell = {
     this.banners.replaceChildren(...list.map(([tone, icon, head, text]) =>
       el("div", { class: "banner " + tone, role: "status" }, ic(icon),
         el("div", { class: "grow" }, el("div", { class: "b-title" }, head), el("div", { class: "b-text" }, text)))));
-  },
-
-  async saveNow() {
-    const note = prompt("Save the footage around now as an incident. Optional note:", "");
-    if (note === null) return;
-    try {
-      const r = await api("/api/incidents", { method: "POST", body: JSON.stringify({ note: note || null }) });
-      toast(r.action === "created" ? "Incident saved. The clip is ready after the post-roll." : "Added to the open incident.", "t-ok");
-    } catch (e) { toast("Could not save: " + e.message, "t-crit"); }
   },
 };
 

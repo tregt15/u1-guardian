@@ -20,7 +20,7 @@ What exists so far (Milestone 0, no printer needed):
 - `python -m guardian.main` runs it all (see config.example.yaml)
 - Web interface in the "Halo" design (docs/design): Dashboard, Incidents, Incident detail (video with the problem
   marked, timeline, AI diagnosis, printer logs), Tool changes (chart and log), Settings. Light and dark, phone and
-  desktop, nothing loaded from the internet. Add `?theme=light` or `?theme=dark` to the address to force a theme
+  desktop, nothing loaded from the internet. The theme button in the header switches between Auto, Light and Dark
 - Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
   or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
 - Alert when the filament feeder reports an error (seen once on a real U1)
