@@ -94,14 +94,10 @@ What it does:
 
 Instead of Ollama you can use an online AI service with your own API key: any OpenAI-compatible service (OpenAI,
 OpenRouter, Groq, Google Gemini's OpenAI-compatible address, and others) or Anthropic (Claude). Pick it on the Settings
-page, type the model name, and put your key in an environment variable (default `GUARDIAN_AI_KEY`) or in the `.env`
-file next to `config.yaml`:
-
-```
-GUARDIAN_AI_KEY=your-key-here
-```
-
-Guardian never saves the key. **Privacy:** with an online service, the camera pictures and printer logs for each check
+page, type the model name, and paste your API key in the AI box. Guardian keeps the key in a separate `secrets.json`
+file in its data folder (readable only by you on Linux). It is never shown again, never put in an export, and only
+sent to the service you picked. If you prefer, put it in an environment variable (default `GUARDIAN_AI_KEY`) or the
+`.env` file instead. The environment variable wins. **Privacy:** with an online service, the camera pictures and printer logs for each check
 go to that company, and it may cost money per check. Local AI keeps everything on your network.
 
 You need a graphics card or a fast computer for local AI. A Raspberry Pi is too small for the local models, but it can

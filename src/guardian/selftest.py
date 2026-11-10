@@ -90,8 +90,9 @@ async def run_checks(cfg: Config, transport: httpx.AsyncBaseTransport | None = N
         except Exception as exc:  # noqa: BLE001
             checks.append(Check("Camera picture", False, str(exc)))
     if cfg.ai.enabled and cfg.ai.provider != "local":
-        from guardian.ai.remote import RemoteAI, api_key
-        ok, msg = await RemoteAI(cfg.ai.provider, cfg.ai.remote_url, api_key(cfg.ai.api_key_env), transport).check(
+        from guardian.ai.remote import RemoteAI
+        from guardian.secrets_store import ai_key
+        ok, msg = await RemoteAI(cfg.ai.provider, cfg.ai.remote_url, ai_key(cfg)[0], transport).check(
             cfg.ai.active_model)
         checks.append(Check("AI service", ok, f"{cfg.ai.provider}, model {cfg.ai.active_model}: {msg}"))
     elif cfg.ai.enabled:

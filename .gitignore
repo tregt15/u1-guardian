@@ -16,3 +16,6 @@ recordings/
 
 # Guardian run logs
 logs/
+
+# keys typed on the Settings page (normally in the data folder, this is a safety net)
+secrets.json

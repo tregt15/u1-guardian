@@ -57,9 +57,8 @@ FIELDS: list[dict[str, Any]] = [
     {"key": "ai.remote_url", "group": "AI", "label": "OpenAI-compatible address", "kind": "text",
      "help": "Only for OpenAI-compatible services. OpenAI is https://api.openai.com/v1. OpenRouter, Groq and others "
              "give their own address."},
-    {"key": "ai.api_key_env", "group": "AI", "label": "API key environment variable", "kind": "text",
-     "help": "Put your key in this environment variable or in the .env file next to config.yaml. "
-             "The key itself is never saved by Guardian."},
+    {"key": "ai.api_key_env", "group": "AI", "label": "API key environment variable (optional)", "kind": "text",
+     "help": "You can type your key in the AI box below instead. If this environment variable is set, it is used first."},
     {"key": "ai.model", "group": "AI", "label": "Local model", "kind": "choice", "options": dict(AI_MODELS),
      "help": "Bigger is better but slower. Needs a graphics card or a fast computer. Too big for a Raspberry Pi."},
     {"key": "ai.ollama_url", "group": "AI", "label": "Ollama address", "kind": "text",

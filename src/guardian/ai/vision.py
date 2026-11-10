@@ -80,8 +80,10 @@ class AiService:
     Local (Ollama) or a service with an API key, as chosen in settings."""
 
     def __init__(self, cfg: AiConfig, clock: Clock, ollama: Ollama | None = None,
-                 remote_transport=None) -> None:
+                 remote_transport=None, key_fn=None) -> None:
         self.cfg = cfg
+        # () -> (key, source). Default: only the environment variable. The app also reads the Settings page key.
+        self._key_fn = key_fn or (lambda: (api_key(self.cfg.api_key_env), "env" if api_key(self.cfg.api_key_env) else None))
         self.clock = clock
         self.ollama = ollama or Ollama(cfg.ollama_url)
         self._remote_transport = remote_transport
@@ -98,13 +100,13 @@ class AiService:
         return self.cfg.provider == "local"
 
     def remote(self) -> RemoteAI:
-        return RemoteAI(self.cfg.provider, self.cfg.remote_url, api_key(self.cfg.api_key_env), self._remote_transport)
+        return RemoteAI(self.cfg.provider, self.cfg.remote_url, self._key_fn()[0], self._remote_transport)
 
     async def refresh(self, force: bool = False) -> None:
         if self.ollama.url != self.cfg.ollama_url:  # the address was changed in settings
             self.ollama = Ollama(self.cfg.ollama_url, self.ollama.transport)
         key = (self.cfg.provider, self.cfg.ollama_url, self.cfg.remote_url, self.cfg.active_model,
-               bool(api_key(self.cfg.api_key_env)))
+               self._key_fn()[0][-6:])
         now = self.clock.monotonic()
         every = AVAILABILITY_EVERY_S if self.local else REMOTE_CHECK_EVERY_S
         if not force and self._checked_for == key and self._checked_mono is not None \
@@ -136,9 +138,14 @@ class AiService:
                 "ollama_url": self.cfg.ollama_url, "ollama_version": self.ollama_version,
                 "ollama_found": bool(self.ollama_version), "model_ready": self.model_ready if self.local else self.remote_ok,
                 "remote_url": self.cfg.remote_url if self.cfg.provider == "openai" else None,
-                "api_key_env": self.cfg.api_key_env, "api_key_found": bool(api_key(self.cfg.api_key_env)),
+                "api_key_env": self.cfg.api_key_env, "api_key_found": bool(self._key_fn()[0]),
+                "api_key_source": self._key_fn()[1], "api_key_hint": _hint(self._key_fn()[0]),
                 "remote_message": None if self.local else self.remote_message,
                 "usable": self.usable, "download": self.ollama.pull_state.as_dict()}
+
+
+def _hint(key: str) -> str | None:
+    return ("..." + key[-4:]) if len(key) >= 8 else ("set" if key else None)
 
 
 ReportFn = Callable[..., Awaitable[Any]]

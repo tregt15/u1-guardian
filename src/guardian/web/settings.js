@@ -113,9 +113,13 @@ async function loadAi() {
     const name = r.provider === "anthropic" ? "Anthropic (Claude)" : "an OpenAI-compatible service" + (r.remote_url ? " at " + r.remote_url : "");
     parts.push(el("div", { class: "notice warn" }, "Online AI: the camera pictures and printer logs for each check are sent to " + name +
       ". Use local AI (Ollama) if you want everything to stay on your network."));
-    parts.push(el("p", {}, "API key (" + r.api_key_env + "): ", r.api_key_found ? badge("found", "ok") : badge("missing", "bad")));
-    if (!r.api_key_found) parts.push(el("p", { class: "muted" }, "Set the environment variable " + r.api_key_env +
-      " to your key, or add a line " + r.api_key_env + "=your-key to the .env file next to config.yaml, then restart Guardian."));
+    parts.push(el("p", {}, "API key: ", r.api_key_found ? badge("set (" + (r.api_key_hint || "") + ")", "ok") : badge("missing", "bad"),
+      r.api_key_source === "env" ? el("span", { class: "muted" }, " from the environment variable " + r.api_key_env + " (it wins over a key typed here)") : null));
+    const keyInput = el("input", { type: "password", id: "ai-key", size: 34, autocomplete: "off", placeholder: r.api_key_found ? "type a new key to replace it" : "paste your API key" });
+    parts.push(el("div", { class: "row" }, keyInput,
+      el("button", { type: "button", class: "primary", onclick: () => saveKey(keyInput.value) }, "Save key"),
+      r.api_key_source === "settings" ? el("button", { type: "button", onclick: () => saveKey("") }, "Remove key") : null));
+    parts.push(el("p", { class: "muted" }, "The key is kept in a separate file in Guardian's data folder. It is never shown again, never put in an export, and only sent to the AI service you picked."));
     parts.push(el("p", {}, "Model: " + (r.model || "not set") + ". Connection: " + (r.remote_message || "not checked yet")));
     parts.push(el("p", { class: "muted" }, r.usable ? "The AI is ready." : !r.enabled ? "Turn on \"Use AI\" above to use it." : "Not ready yet. See above."));
     box.replaceChildren(...parts);
@@ -170,6 +174,15 @@ async function loadAi() {
 
 let offeredModel = false;
 
+async function saveKey(value) {
+  if (!value.trim() && !confirm("Remove the saved API key?")) return;
+  try {
+    await api("/api/ai/key", { method: "PUT", body: JSON.stringify({ key: value.trim() || null }) });
+    say(value.trim() ? "API key saved." : "API key removed.", "info");
+  } catch (e) { say("Key not saved: " + e.message, "bad"); }
+  loadAi();
+}
+
 async function installOllama(fromToggle) {
   const ask = (fromToggle ? "Local AI needs Ollama, and it is not installed on this computer. " : "") +
     "Install Ollama for you now? It is a free program from ollama.com. It is a large download (around 1 GB or more) " +
@@ -185,8 +198,10 @@ async function afterAiTurnedOn() {
   try { r = await api("/api/ai/status"); } catch (e) { return; }
   if ((r.download || {}).running || (((r.install || {}).state) || {}).running) return;  // already on its way
   if (r.provider && r.provider !== "local") {
-    if (!r.api_key_found) alert("The online AI needs your API key. Put it in the environment variable " + r.api_key_env +
-      " or in the .env file next to config.yaml, then restart Guardian.");
+    if (!r.api_key_found) {
+      alert("The online AI needs your API key. Paste it in the AI box below and click Save key.");
+      const k = document.getElementById("ai-key"); if (k) k.focus();
+    }
     return;
   }
   if (r.ollama_found) {

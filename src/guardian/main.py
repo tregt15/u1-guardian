@@ -43,7 +43,7 @@ from guardian.printer.logs import PrinterLogs
 from guardian.printer.moonraker_client import MoonrakerClient
 from guardian.printer.state_tracker import StateTracker
 from guardian.printer.toolchanger import ToolchangeMonitor
-from guardian import selftest
+from guardian import secrets_store, selftest
 from guardian import settings as settings_mod
 from guardian.storage.db import Database
 
@@ -106,7 +106,7 @@ class App:
             send_pause=self.client.pause_print,
             note=lambda kind, meta: self.manager.add_note(kind, "guardian", meta),
             audit=lambda msg, meta: self.db.log("autopause", "warning", msg, meta))
-        self.ai = AiService(cfg.ai, self.clock)
+        self.ai = AiService(cfg.ai, self.clock, key_fn=lambda: secrets_store.ai_key(self.cfg))
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
                                     save_evidence=self._save_ai_pictures,
@@ -129,7 +129,8 @@ class App:
                                                 "fresh_frame": self._fresh_frame,
                                                 "selftest": self.run_selftest,
                                                 "control": self.printer_control,
-                                                "latest_frame": self._latest_frame}))
+                                                "latest_frame": self._latest_frame,
+                                                "set_ai_key": self.set_ai_key}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.connected", self._on_reconnect)
@@ -179,6 +180,13 @@ class App:
         if latest is None or (self.clock.now_utc() - latest[0]).total_seconds() > 3.0:
             return None
         return latest[1]
+
+    async def set_ai_key(self, key: str | None) -> dict:
+        """Save or remove the AI key typed on the Settings page. Raises ValueError. The key is never logged."""
+        secrets_store.put(self.cfg, secrets_store.AI_KEY, key)
+        self.db.log("settings", "info", "AI API key " + ("saved" if key else "removed") + " from the dashboard")
+        await self.ai.refresh(force=True)
+        return {"set": bool(key), "status": self.ai.status()}
 
     async def printer_control(self, action: str) -> dict:
         """Pause, Resume or Stop from the dashboard. A person clicked and confirmed. Raises ValueError."""

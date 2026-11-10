@@ -81,6 +81,11 @@ class AiModelBody(BaseModel):
 AI_PICTURE_RE = re.compile(r"^ai_picture_[0-9]{1,3}\.jpg$")
 
 
+class AiKeyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str | None = Field(default=None, max_length=500)
+
+
 class ControlBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirm: bool = False
@@ -278,6 +283,17 @@ def create_app(ctx: ApiContext) -> FastAPI:
                 "install_help": "https://ollama.com/download",
                 "install": {"plan": inst.plan(), "state": inst.state.as_dict()} if inst else None,
                 "models": {k: v for k, v in AI_MODELS.items()}}
+
+    @app.put("/api/ai/key", dependencies=[Depends(auth)])
+    async def ai_key(body: AiKeyBody) -> dict:
+        """Save (or with an empty key, remove) the AI API key. The key is never sent back."""
+        fn = ctx.extra.get("set_ai_key")
+        if fn is None:
+            raise HTTPException(409, "not available in this mode")
+        try:
+            return await fn(body.key or None)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/ai/install", dependencies=[Depends(auth)])
     async def ai_install() -> dict:
