@@ -60,6 +60,8 @@ async def test_collect_uses_ranges_and_survives_a_missing_file():
 
     def handler(request: httpx.Request) -> httpx.Response:
         name = request.url.path.rsplit("/", 1)[1]
+        if name == "list":  # which klippy.log is newest. No list here, so the old name is used.
+            return httpx.Response(404)
         seen[name] = request.headers.get("range")
         if name == "unisrv.log":
             return httpx.Response(404)
@@ -76,3 +78,34 @@ async def test_collect_uses_ranges_and_survives_a_missing_file():
     assert "cut-in-half" not in text
     assert "wheel_speed" in text and "hello" in text
     assert set(problems) == {"unisrv.log"} and "could not read" in text
+
+
+def test_firmware_2_1_klippy_format_with_month_and_day():
+    text = ("11-10 07:33:45.506:Pausing toolhead to calculate extruder1 phase offset\n"
+            "11-10 07:33:45.911:extruder1 -> extruder1\n"
+            "11-10 07:33:45.912:Extruder extruder1 already active\n"
+            "11-10 07:34:32.736:mcu: stepper_x:122521\n"
+            "    stepper: stepper_x:392.34\n")
+    start, end = datetime(2026, 11, 10, 7, 33, 40, tzinfo=UTC), datetime(2026, 11, 10, 7, 34, 40, tzinfo=UTC)
+    out = excerpt("klippy.log", text, start, end, datetime(2026, 11, 10, 7, 50, tzinfo=UTC))
+    assert out[2] == "07:33:45.912 Extruder extruder1 already active"
+    assert "    stepper: stepper_x:392.34" in out[3]
+    # A December line read in early January belongs to last year.
+    old = excerpt("klippy.log", "12-31 23:59:59.000:old year\n", datetime(2026, 12, 31, 23, 59, tzinfo=UTC),
+                  datetime(2027, 1, 1, 0, 1, tzinfo=UTC), datetime(2027, 1, 1, 0, 5, tzinfo=UTC))
+    assert old == ["23:59:59.000 old year"]
+
+
+async def test_newest_klippy_log_path_is_used():
+    asked = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/server/files/list"):
+            return httpx.Response(200, json={"result": [{"path": "klippy.log", "modified": 100},
+                                                        {"path": "klippylogs/klippy.log", "modified": 200}]})
+        asked.append(request.url.path)
+        return httpx.Response(206, content=b"")
+
+    await PrinterLogs("p", 80, transport=httpx.MockTransport(handler)).collect(
+        datetime(2026, 11, 10, tzinfo=UTC), datetime(2026, 11, 10, 0, 1, tzinfo=UTC), datetime(2026, 11, 10, 0, 2, tzinfo=UTC))
+    assert "/server/files/logs/klippylogs/klippy.log" in asked

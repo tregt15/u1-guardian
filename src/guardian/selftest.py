@@ -31,7 +31,7 @@ REQUIRED_OBJECTS = (
     "print_stats", "toolhead", "virtual_sdcard", "heater_bed", "extruder", "extruder1", "extruder2", "extruder3",
     "machine_state_manager", "filament_feed left", "filament_feed right", "defect_detection", "exception_manager",
 )
-TESTED_ON = "1.4.1.6_20260608141446"
+TESTED_ON = "2.1.0.157_20261028045538"  # first checked on 1.4.1.6_20260608141446, then 2.1.0 (2026-11-10)
 
 
 @dataclass
@@ -76,8 +76,9 @@ async def run_checks(cfg: Config, transport: httpx.AsyncBaseTransport | None = N
         try:
             files = await get("/server/files/list?root=logs")
             names = {f.get("path") for f in files}
-            ok = "klippy.log" in names
-            checks.append(Check("Printer logs readable", ok, "klippy.log found" if ok else "klippy.log not listed"))
+            found = [n for n in ("klippylogs/klippy.log", "klippy.log") if n in names]
+            ok = bool(found)
+            checks.append(Check("Printer logs readable", ok, f"{found[0]} found" if ok else "klippy.log not listed"))
         except Exception as exc:  # noqa: BLE001
             checks.append(Check("Printer logs readable", False, f"could not list: {exc}"))
     if cfg.camera.snapshot_url:

@@ -42,6 +42,12 @@ class StateTracker:
         """Fields stored on an incident (spec 6.7: filename, progress, toolhead)."""
         ps = self.status.get("print_stats", {})
         meta: dict[str, Any] = {}
+        if ps.get("state") not in ("printing", "paused"):
+            # Between prints print_stats still holds the last print's file and progress. Seen 2026-11-10: an email
+            # about a refused start showed the old file at 100%. So only say the tool head then.
+            if self.status.get("toolhead", {}).get("extruder"):
+                meta["active_toolhead"] = self.status["toolhead"]["extruder"]
+            return meta
         if ps.get("filename"):
             meta["print_filename"] = ps["filename"]
         info = ps.get("info") or {}

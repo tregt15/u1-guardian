@@ -228,3 +228,22 @@ The printer's own build plate check (read from `/home/lava/klipper/klippy/extras
   the `!!` line, `Pausing...` and "Raising exception: id:525". So the filament was not moving through the feeder.
 - `GET /printer/info` gives `software_version: 1.4.1.6_20260608141446`. Guardian uses it to notice firmware updates.
 
+
+
+## Firmware 2.1.0 (installed 2026-11-10)
+
+The printer updated from 1.4.1.6_20260608141446 to 2.1.0.157_20261028045538 (Moonraker 2.1.0). Self-test: all
+objects Guardian reads are still there. Seen so far, first print on 2.1.0:
+
+- New line before a print: `Pausing toolhead to calculate extruder1 phase offset`, then the gcode response
+  `// extruder1 -> extruder1` and `Extruder extruder1 already active`. Nothing is parked or picked. Guardian took it
+  as a tool change, timed out and auto paused a good print. Fixed: `A -> A` is ignored.
+- Tool changes still use the same lines (`A -> B`, `park A !!!`, `pick B !!!`, `Activating extruder B`). They looked
+  faster in klippy.log (about 2.4 s from park to activating).
+- klippy.log moved to `klippylogs/klippy.log` (the old `klippy.log` stays but is no longer written). Lines now start
+  with month and day: `11-10 07:28:29.688:`.
+- unisrv picture timing line changed tag (`MON:387`) and went from about 480 ms to about 30 ms per picture.
+  Camera pictures are larger (about 184 KB).
+- Moonraker logs Guardian's camera request as `Repeater camera.start_monitor`.
+- Guardian's pause during `M109` (wait for nozzle heat) took effect about 20 s later, when the wait finished.
+  So a pause is not instant while the printer waits for a heater.

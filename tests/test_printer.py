@@ -235,3 +235,13 @@ async def test_pause_only_when_allowed_and_without_params():
         await task
         await mock.stop()
     assert mock.pauses == [None] and mock.refused == []
+
+
+def test_metadata_between_prints_has_no_old_file():
+    tracker = StateTracker(EventBus())
+    tracker.status = {"print_stats": {"state": "complete", "filename": "old.gcode",
+                                      "info": {"total_layer": 10, "current_layer": 10}},
+                      "toolhead": {"extruder": "extruder1"}}
+    assert tracker.incident_metadata() == {"active_toolhead": "extruder1"}
+    tracker.status["print_stats"]["state"] = "printing"
+    assert tracker.incident_metadata()["print_filename"] == "old.gcode"

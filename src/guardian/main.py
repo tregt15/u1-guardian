@@ -131,6 +131,7 @@ class App:
                                                 "selftest": self.run_selftest}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
+        self.bus.subscribe("printer.connected", self._on_reconnect)
         self.bus.subscribe("printer.disconnected", self._log_event)
         self.bus.subscribe("incident.created", self._log_event)
         self.bus.subscribe("incident.merged", self._log_event)
@@ -347,6 +348,13 @@ class App:
             await asyncio.gather(*tasks, return_exceptions=True)
             # Anything still open is finalized by the next start (recover_interrupted).
             self.db.close()
+
+    def _on_reconnect(self, topic: str, payload) -> None:
+        """A reconnect often means the printer restarted, maybe after a firmware update. Check again."""
+        if isinstance(payload, dict) and payload.get("n", 1) > 1:
+            task = asyncio.create_task(self._startup_selftest())
+            self._bg.add(task)
+            task.add_done_callback(self._bg.discard)
 
     async def _startup_selftest(self) -> None:
         try:

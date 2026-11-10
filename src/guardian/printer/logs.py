@@ -5,7 +5,8 @@ Moonraker serves the printer's log folder as the read-only file root `logs`
 the files are klippy.log, moonraker.log, unisrv.log, syslog, gui.log and rotated copies.
 
 Line formats seen on the U1 (printer clock is UTC):
-- klippy.log:    `06:11:19.722:text` (time only. The date is taken from the incident.)
+- klippy.log:    `06:11:19.722:text` on firmware 1.4.1 (time only), `11-10 07:28:29.688:text` on 2.1.0
+                 (month-day added, no year). Firmware 2.1.0 also moved it to `klippylogs/klippy.log`.
 - moonraker.log: `2026-11-09 16:45:52,731 text`
 - unisrv.log:    `[2026-11-09 16:26:04.311] [unisrv] [info] text`
 
@@ -25,16 +26,17 @@ from guardian.clock import ensure_utc
 
 log = logging.getLogger(__name__)
 
-KLIPPY_RE = re.compile(r"^(\d\d):(\d\d):(\d\d)\.(\d{3}):(.*)$")
+KLIPPY_RE = re.compile(r"^(?:(\d\d)-(\d\d) )?(\d\d):(\d\d):(\d\d)\.(\d{3}):(.*)$")
 MOONRAKER_RE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),(\d{3}) (.*)$")
 UNISRV_RE = re.compile(r"^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.(\d{3})\] (.*)$")
 STATS_TEMPS_RE = re.compile(r"(heater_bed: target=\S+ temp=\S+|cavity: temp=\S+|extruder\d?: target=\S+ temp=\S+)")
 
 TAIL_BYTES = {"klippy.log": 768 * 1024, "moonraker.log": 256 * 1024, "unisrv.log": 256 * 1024}
+KLIPPY_PATHS = ("klippylogs/klippy.log", "klippy.log")  # 2.1.0 path first, then 1.4.1
 MAX_LINES = 400
 STATS_EVERY_S = 10.0
 # unisrv logs one picture timing line every 5 s while the camera is on. It says nothing useful here.
-NOISE = ("MON:429", "notify_system_check_remote", "Check remote firmware result",
+NOISE = ("The average time consumption for 10 capturing", "notify_system_check_remote", "Check remote firmware result",
          "\"method\":\"printer.objects.query\",\"params\":{\"objects\":{\"machine_state_manager\":null}}")
 
 
@@ -55,9 +57,16 @@ def _parse(name: str, text: str, anchor: datetime) -> list[LogLine]:
     for raw in text.splitlines():
         if name.startswith("klippy"):
             m = KLIPPY_RE.match(raw)
+            if m and m[1]:  # firmware 2.1.0: month and day are given, only the year is missing
+                ts = datetime(anchor.year, int(m[1]), int(m[2]), int(m[3]), int(m[4]), int(m[5]),
+                              int(m[6]) * 1000, tzinfo=anchor.tzinfo)
+                if ts > anchor + timedelta(days=1):
+                    ts = ts.replace(year=anchor.year - 1)  # a December line read in January
+                rows.append([ts, m[7], False])
+                continue
             if m:
-                tod = timedelta(hours=int(m[1]), minutes=int(m[2]), seconds=int(m[3]), milliseconds=int(m[4]))
-                rows.append([tod, m[5], True])
+                tod = timedelta(hours=int(m[3]), minutes=int(m[4]), seconds=int(m[5]), milliseconds=int(m[6]))
+                rows.append([tod, m[7], True])
                 continue
         else:
             m = (MOONRAKER_RE if name.startswith("moonraker") else UNISRV_RE).match(raw)
@@ -117,9 +126,22 @@ class PrinterLogs:
         self.base = f"http://{host}:{port}/server/files/logs/"
         self._transport = transport
 
-    async def _tail(self, client: httpx.AsyncClient, name: str) -> tuple[str, bool]:
+    async def _klippy_path(self, client: httpx.AsyncClient) -> str:
+        """The klippy.log that was written last (the path changed with firmware 2.1.0)."""
+        try:
+            r = await client.get(self.base.replace("/server/files/logs/", "/server/files/list"),
+                                 params={"root": "logs"})
+            files = {f.get("path"): f.get("modified") or 0 for f in r.json().get("result", [])}
+            found = [p for p in KLIPPY_PATHS if p in files]
+            if found:
+                return max(found, key=lambda p: files[p])
+        except Exception:  # noqa: BLE001 - fall back to the old name
+            pass
+        return "klippy.log"
+
+    async def _tail(self, client: httpx.AsyncClient, name: str, path: str | None = None) -> tuple[str, bool]:
         """(text, truncated). truncated: the file is longer than what was read."""
-        r = await client.get(self.base + name, headers={"Range": f"bytes=-{TAIL_BYTES[name]}"})
+        r = await client.get(self.base + (path or name), headers={"Range": f"bytes=-{TAIL_BYTES[name]}"})
         if r.status_code not in (200, 206):
             raise RuntimeError(f"HTTP {r.status_code}")
         text = r.content.decode("utf-8", errors="replace")
@@ -137,9 +159,10 @@ class PrinterLogs:
         ]
         problems: dict[str, str] = {}
         async with httpx.AsyncClient(timeout=15.0, transport=self._transport) as client:
+            klippy_path = await self._klippy_path(client)
             for name in TAIL_BYTES:
                 try:
-                    text, truncated = await self._tail(client, name)
+                    text, truncated = await self._tail(client, name, klippy_path if name == "klippy.log" else None)
                 except Exception as exc:  # noqa: BLE001
                     problems[name] = f"could not read ({type(exc).__name__}: {exc})"
                     parts += [f"===== {name} =====", f"(could not read: {exc})", ""]
