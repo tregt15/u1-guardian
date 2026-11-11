@@ -23,6 +23,7 @@ import uvicorn
 from guardian.ai.diagnosis import Diagnoser
 from guardian.ai.gcode_view import GcodeFollower, draw_top
 from guardian.camera.calibration import CameraSetup
+from guardian.camera.setup_moves import TOP_Z, SetupMover
 from guardian.camera.match import decode as decode_jpeg
 from guardian.camera.match import score as match_score
 from guardian.ai.installer import OllamaInstaller
@@ -125,6 +126,11 @@ class App:
         self._match_task: asyncio.Task | None = None
         self._match_last = 0.0
         self.match_history: list[dict] = []
+        self.setup_mover = SetupMover(
+            self.clock, allowed=lambda: self.cfg.controls.setup_moves, print_state=lambda: self.tracker.print_state,
+            connected=lambda: self.client.connected, move=self.client.setup_move, picture=self._fresh_frame,
+            camera_on=self.client.start_camera_monitor, bed_z=self._bed_z, save=self.save_frame,
+            audit=lambda msg, meta: self.db.log("controls", "warning", msg, meta))
         self.ai = AiService(cfg.ai, self.clock, key_fn=lambda: secrets_store.ai_key(self.cfg))
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
@@ -330,6 +336,18 @@ class App:
 
         self._match_task = asyncio.create_task(run())
 
+    def bed_at_top(self) -> bool:
+        z = self._bed_z()
+        homed = "z" in str(self.tracker.status.get("toolhead", {}).get("homed_axes", ""))
+        return bool(homed and z is not None and z <= TOP_Z)
+
+    def last_print(self) -> dict:
+        ps = self.tracker.status.get("print_stats", {})
+        name = ps.get("filename")
+        height = self.gcode.plate.max_z if self.gcode.filename == name and self.gcode.plate.max_z else \
+            (self._file_meta.get("object_height") if self._file_meta.get("filename") == name else None)
+        return {"file": name or None, "state": ps.get("state"), "height_mm": round(height, 1) if height else None}
+
     def match_status(self) -> dict:
         h = self.match_history
         last = h[-1] if h else None
@@ -435,6 +453,7 @@ class App:
         self.client.allow_camera_start = self.snapshot_mode and self.cfg.camera.keepalive != "off"
         self.client.allow_pause = self.cfg.autopause.enabled
         self.client.allow_controls = self.cfg.controls.enabled
+        self.client.allow_setup_moves = self.cfg.controls.setup_moves
 
     def apply_settings(self, changes: dict) -> list[str]:
         """Check, save and apply dashboard settings. Raises settings.SettingsError."""
@@ -454,6 +473,8 @@ class App:
         Until the first printer snapshot arrives, keep buffering."""
         if self.cfg.blackbox.buffer_mode == "always":
             return True
+        if getattr(self, "setup_mover", None) is not None and self.setup_mover.running:
+            return True  # the camera setup needs fresh pictures while the bed moves
         # Auto camera "always" keeps the U1 camera on while idle, so keep the pictures too.
         # (Before this, the camera was on but Guardian did not read it, and the dashboard said no pictures came.)
         if self.snapshot_mode and self.cfg.camera.keepalive == "always":

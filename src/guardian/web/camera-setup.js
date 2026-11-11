@@ -13,6 +13,10 @@ stage.append(img, svg);
 const cornerBtns = el("div", { class: "seg", role: "radiogroup", "aria-label": "Which corner" });
 const fitBox = el("div");
 const noFrame = el("p", { class: "small muted" }, "Pick a picture above first. Then click the corners on it here.");
+const bedBox = el("div");
+const lockNote = el("div", { class: "banner t-info", style: "margin-bottom:12px" }, ic("i-lock"),
+  el("div", { class: "b-text" }, "Clicking is locked until the bed is at the very top, so the plate is in full view."));
+let asked = false, movePoll = null;
 const msg = el("p", { class: "small muted" });
 
 main.append(
@@ -21,17 +25,18 @@ main.append(
       el("p", { class: "h-sub" }, "Show Guardian where the camera looks, so it can compare the camera with the print file.")))),
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-info"), el("h2", { class: "card-title" }, "How it works")),
     el("div", { class: "card-b" }, el("ol", { class: "numlist" },
-      el("li", {}, "Pick a picture where you can see the build plate. Guardian saves some by itself at the start of each print, at a few bed heights."),
+      el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves two pictures on the way up."),
       el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden, click where it would be."),
       el("li", {}, "Do the same on a second picture with the bed at a different height (for example the start of a print and 30 mm later)."),
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
-      el("p", { class: "small muted", style: "margin-top:8px" }, "Guardian never moves the bed. To use the live picture now, raise the bed from the printer screen first."))),
+      el("p", { class: "small muted", style: "margin-top:8px" }, "Guardian only moves the bed here, only when no print is running, and only after you confirm the plate is empty."))),
+  bedBox,
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-camera"), el("h2", { class: "card-title" }, "Pictures"),
     el("button", { type: "button", class: "btn btn-secondary btn-sm right", onclick: saveLive }, ic("i-camera", "sm"), "Use the live picture now")),
     el("div", { class: "card-b" }, frameList, msg)),
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-eye"), el("h2", { class: "card-title" }, "Click the corners"),
     el("span", { class: "right" }, cornerBtns)),
-    el("div", { class: "card-b" }, noFrame, stage, el("div", { class: "row", style: "margin-top:12px" },
+    el("div", { class: "card-b" }, lockNote, noFrame, stage, el("div", { class: "row", style: "margin-top:12px" },
       el("button", { type: "button", class: "btn btn-primary", onclick: save }, "Save and check"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(1, null) }, "Turn the drawing"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(0, true) }, "Mirror the drawing"),
@@ -49,6 +54,10 @@ function drawCorners() {
 }
 
 function draw() {
+  const top = !!(info && info.bed_at_top);
+  lockNote.hidden = top;
+  img.style.cursor = top ? "crosshair" : "not-allowed";
+  img.style.opacity = top ? "1" : ".55";
   stage.hidden = !frame;
   cornerBtns.hidden = !frame;
   noFrame.hidden = !!frame;
@@ -73,7 +82,7 @@ function draw() {
 
 img.addEventListener("load", draw);
 img.addEventListener("click", (ev) => {
-  if (!frame) return;
+  if (!frame || !(info && info.bed_at_top)) return;  // locked until the bed is at the very top
   const r = img.getBoundingClientRect();
   const u = (ev.clientX - r.left) / r.width * (img.naturalWidth || 1920);
   const v = (ev.clientY - r.top) / r.height * (img.naturalHeight || 1080);
@@ -113,13 +122,67 @@ function drawFit() {
         (info.rotation * 90) + " degrees" + (info.mirror ? ", mirrored." : ".")))));
 }
 
+function drawBed() {
+  const m = (info && info.move) || {};
+  if (m.running) {
+    bedBox.replaceChildren(el("div", { class: "banner t-info" }, el("span", { class: "dot pulse", style: "margin-top:8px" }),
+      el("div", {}, el("div", { class: "b-title" }, "Moving the bed: " + (m.step || "starting")),
+        el("div", { class: "b-text" }, "Keep hands out of the printer. This takes about a minute."))));
+    return;
+  }
+  if (m.state === "error") {
+    bedBox.replaceChildren(el("div", { class: "banner t-crit" }, ic("i-alert"), el("div", { class: "grow" },
+      el("div", { class: "b-title" }, "Guardian stopped moving the bed."), el("div", { class: "b-text" }, m.error || "")),
+      el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: askMove }, "Try again")));
+    return;
+  }
+  if (info && !info.bed_at_top) {
+    const why = !info.moves_allowed ? "Moving the bed for the setup is turned off in Settings, Printer controls. You can also raise the bed from the printer screen."
+      : ["printing", "paused"].includes(info.print_state) ? "A print is " + info.print_state + ". Finish it and clear the plate first."
+        : "The bed is not at the top yet.";
+    bedBox.replaceChildren(el("div", { class: "banner t-warn" }, ic("i-alert"), el("div", { class: "grow" },
+      el("div", { class: "b-title" }, "The plate is not in view."), el("div", { class: "b-text" }, why)),
+      info.moves_allowed && !["printing", "paused"].includes(info.print_state) ? el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: askMove }, "Try again") : null));
+    return;
+  }
+  bedBox.replaceChildren();
+}
+
+async function askMove() {
+  const lp = (info && info.last_print) || {};
+  const last = lp.file ? "The last print was " + lp.file + (lp.height_mm ? " (" + lp.height_mm + " mm tall)" : "") + ". Make sure it is off the plate. " : "";
+  const ok = await ask("To set up the camera, Guardian will home the printer and raise the bed to the top. " + last +
+    "Anything left on the build plate would hit the toolhead. Keep hands out of the printer.", { ok: "Plate is empty, go", typed: "EMPTY" });
+  if (!ok) { drawBed(); return; }
+  try { await api("/api/camera-setup/move", { method: "POST", body: JSON.stringify({ plate_empty: true }) }); }
+  catch (e) { toast(e.message, "t-crit"); return; }
+  pollMove();
+}
+
+function pollMove() {
+  clearInterval(movePoll);
+  movePoll = setInterval(async () => {
+    try { info = await api("/api/camera-setup"); } catch (e) { return; }
+    drawBed(); draw();
+    if (!info.move.running) {
+      clearInterval(movePoll);
+      if (info.move.state === "done") { toast("The bed is at the top. Click the 4 corners on each picture.", "t-ok"); frame = null; load(); }
+    }
+  }, 2000);
+  drawBed();
+}
+
 async function load() {
   try { info = await api("/api/camera-setup"); } catch (e) { msg.textContent = "Could not load: " + e.message; return; }
+  drawBed();
+  if (info.move.running) pollMove();
+  else if (!info.bed_at_top && !asked && info.moves_allowed && !["printing", "paused"].includes(info.print_state)) { asked = true; askMove(); }
   clicks = {};
   for (const c of info.clicks || []) (clicks[c.frame] = clicks[c.frame] || {})[c.corner] = [c.u, c.v];
   drawFrames();
   drawFit();
-  if (!frame && info.frames.length) pick((info.frames.find(f => clicks[f.name]) || info.frames[0]).name);
+  const pref = info.frames.find(f => f.name === "setup_05") || info.frames.find(f => clicks[f.name]) || info.frames[0];
+  if (!frame && pref) pick(pref.name);
   else if (frame) pick(frame);
 }
 

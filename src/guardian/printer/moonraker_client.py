@@ -13,6 +13,8 @@ Two exceptions, both owner approved (2026-11-09), each behind its own switch:
 - `printer.print.pause` with no params (allow_pause, or allow_controls). Standard Moonraker. On the
   U1 it runs Klipper's PAUSE (read in pause_resume.py), which refuses when not printing or already
   paused. Verified on the real U1 (2026-11-10): it paused a print.
+- `printer.gcode.script` with exactly one of SETUP_SCRIPTS (allow_setup_moves): home, then raise the bed to
+  30 mm and 5 mm for the camera setup, only when idle and after the person confirmed the plate is empty.
 - `printer.print.resume` and `printer.print.cancel` with no params (allow_controls). Only sent when a
   person clicks Resume or Stop on the dashboard and confirms (owner asked, 2026-11-10). Guardian
   itself never sends them.
@@ -48,6 +50,10 @@ CAMERA_START_PARAMS = {"domain": "lan", "interval": 0}
 PAUSE = "printer.print.pause"
 RESUME = "printer.print.resume"
 CANCEL = "printer.print.cancel"
+GCODE = "printer.gcode.script"
+# The only G-code Guardian may ever send (owner approved, 2026-11-11): homing and two bed heights for the camera setup.
+# The U1 Z home is at the bottom (position_endstop 275), so homing lowers the bed. Z 5 is the lowest it goes.
+SETUP_SCRIPTS = frozenset({"G28", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z5 F300\nM400"})
 
 _ID_INFO, _ID_LIST, _ID_SUBSCRIBE = 1, 2, 3
 
@@ -65,6 +71,7 @@ class MoonrakerClient:
         allow_camera_start: bool = False,
         allow_pause: bool = False,
         allow_controls: bool = False,
+        allow_setup_moves: bool = False,
     ) -> None:
         self.url = f"ws://{host}:{port}/websocket"
         self.bus = bus
@@ -78,6 +85,8 @@ class MoonrakerClient:
         self.allow_camera_start = allow_camera_start
         self.allow_pause = allow_pause
         self.allow_controls = allow_controls
+        self.allow_setup_moves = allow_setup_moves
+        self._pending: dict[int, asyncio.Future] = {}
         self._ws = None
         self._next_id = 1000
 
@@ -85,7 +94,9 @@ class MoonrakerClient:
         camera_ok = self.allow_camera_start and method == CAMERA_START and params == CAMERA_START_PARAMS
         pause_ok = (self.allow_pause or self.allow_controls) and method == PAUSE and params is None
         control_ok = self.allow_controls and method in (RESUME, CANCEL) and params is None
-        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok and not control_ok:
+        setup_ok = (self.allow_setup_moves and method == GCODE and isinstance(params, dict) and set(params) == {"script"}
+                    and params["script"] in SETUP_SCRIPTS)
+        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok and not control_ok and not setup_ok:
             raise RuntimeError(f"refusing to send {method}: not on the read-only list")
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": rpc_id}
         if params is not None:
@@ -114,6 +125,26 @@ class MoonrakerClient:
         """Only for the dashboard Stop button (a person clicked and confirmed)."""
         return await self._simple(CANCEL)
 
+    async def setup_move(self, script: str, timeout: float = 240.0) -> None:
+        """Send one of SETUP_SCRIPTS and wait until the printer says it is done. Raises RuntimeError."""
+        ws = self._ws
+        if ws is None or not self.connected:
+            raise RuntimeError("The printer is not connected.")
+        self._next_id += 1
+        rid = self._next_id
+        fut = asyncio.get_running_loop().create_future()
+        self._pending[rid] = fut
+        try:
+            await self._send(ws, rid, GCODE, {"script": script})
+            reply = await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError("The printer did not finish the move in time.") from None
+        finally:
+            self._pending.pop(rid, None)
+        if "error" in reply:
+            err = reply["error"]
+            raise RuntimeError(f"The printer refused: {err.get('message') if isinstance(err, dict) else err}")
+
     async def _simple(self, method: str) -> bool:
         ws = self._ws
         if ws is None or not self.connected:
@@ -141,6 +172,10 @@ class MoonrakerClient:
             except Exception:  # noqa: BLE001 - never let the client die
                 log.exception("unexpected printer client error")
             self._ws = None
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_result({"error": {"message": "lost the link to the printer"}})
+            self._pending.clear()
             if self.connected:
                 self.connected = False
                 await self.bus.publish("printer.disconnected", {"url": self.url})
@@ -186,6 +221,10 @@ class MoonrakerClient:
                 "printer_ts": data["result"].get("eventtime"),
                 "recv_utc": recv_utc, "recv_mono": recv_mono,
             })
+        elif isinstance(rpc_id, int) and rpc_id in self._pending:
+            fut = self._pending.pop(rpc_id)
+            if not fut.done():
+                fut.set_result(data)
         elif isinstance(rpc_id, int) and rpc_id > 1000 and "error" in data:
             # A reply to one of the two opt-in requests. Log it so a refusal is visible.
             log.warning("the printer refused request %s: %s", rpc_id, data.get("error"))

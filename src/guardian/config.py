@@ -268,6 +268,9 @@ class ControlsConfig(_Section):
     request only when a person clicks it and confirms. Guardian itself never resumes or stops a print."""
 
     enabled: bool = True
+    # The camera setup may home the printer and raise the bed (owner asked, 2026-11-11). Only when idle and after the
+    # person confirms the plate is empty.
+    setup_moves: bool = True
 
 
 class Config(_Section):

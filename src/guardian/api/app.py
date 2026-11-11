@@ -94,7 +94,12 @@ class SetupBody(BaseModel):
     mirror: bool | None = None
 
 
-SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|live_[0-9]{8,14})$")
+SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|setup_30|setup_05|live_[0-9]{8,14})$")
+
+
+class MoveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plate_empty: bool = False
 
 
 class ControlBody(BaseModel):
@@ -414,7 +419,18 @@ def create_app(ctx: ApiContext) -> FastAPI:
                 "rotation": a.camera_setup.data.get("rotation", 0), "mirror": a.camera_setup.data.get("mirror", False),
                 "clicks": a.camera_setup.data.get("clicks", []), "frames": frames,
                 "bed_z_now": a._bed_z(), "homed": st.get("toolhead", {}).get("homed_axes", ""),
-                "print_state": a.tracker.print_state}
+                "print_state": a.tracker.print_state, "bed_at_top": a.bed_at_top(), "move": a.setup_mover.status(),
+                "moves_allowed": a.cfg.controls.setup_moves, "last_print": a.last_print()}
+
+    @app.post("/api/camera-setup/move", dependencies=[Depends(auth)])
+    async def camera_setup_move(body: MoveBody) -> dict:
+        """Home the printer and raise the bed for the camera setup. Only when idle and the plate is confirmed empty."""
+        a = the_app()
+        try:
+            a.setup_mover.start(body.plate_empty)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return a.setup_mover.status()
 
     @app.get("/api/camera-setup/frames/{name}", dependencies=[Depends(auth)])
     async def camera_setup_frame(name: str):

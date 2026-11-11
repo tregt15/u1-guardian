@@ -29,6 +29,9 @@ FIELDS: list[dict[str, Any]] = [
              "Always also keeps recent footage while the printer is idle."},
     {"key": "controls.enabled", "group": "Printer controls", "label": "Show Pause, Resume and Stop buttons",
      "kind": "bool", "help": "Buttons on the dashboard. Each asks you to confirm before anything is sent."},
+    {"key": "controls.setup_moves", "group": "Printer controls", "label": "Let the camera setup move the bed",
+     "kind": "bool", "help": "When you open Camera setup, Guardian can home the printer and raise the bed so the camera "
+     "sees the plate. It asks you to confirm the plate is empty first, and never does it during a print."},
     {"key": "autopause.enabled", "group": "Auto pause", "label": "Pause the print on a problem", "kind": "bool",
      "help": "If Guardian finds a problem below and the printer did not pause by itself, Guardian pauses it."},
     {"key": "autopause.grace_s", "group": "Auto pause", "label": "Wait before pausing (seconds)", "kind": "number",
