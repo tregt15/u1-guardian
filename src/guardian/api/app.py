@@ -408,6 +408,10 @@ def create_app(ctx: ApiContext) -> FastAPI:
     @app.get("/api/camera-setup", dependencies=[Depends(auth)])
     async def camera_setup_get() -> dict:
         a = the_app()
+        try:
+            await a._refresh_file_meta()  # so the "is the plate empty?" question can name the last print's height
+        except Exception:  # noqa: BLE001
+            pass
         frames = []
         if a.frames_dir.is_dir():
             for p in sorted(a.frames_dir.glob("*.json")):
