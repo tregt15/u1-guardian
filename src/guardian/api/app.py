@@ -36,6 +36,7 @@ from guardian import settings as settings_mod
 from guardian.bus import EventBus
 from guardian.clock import from_iso, to_iso
 from guardian.config import AI_MODELS, Config
+from guardian.camera.calibration import CalibrationError as CalibrationErrorApi
 from guardian.storage.db import Database
 from guardian.storage.paths import incident_dir
 
@@ -84,6 +85,16 @@ AI_PICTURE_RE = re.compile(r"^ai_picture_[0-9]{1,3}\.jpg$")
 class AiKeyBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: str | None = Field(default=None, max_length=500)
+
+
+class SetupBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clicks: list[dict] = Field(default_factory=list, max_length=64)
+    rotation: int | None = Field(default=None, ge=0, le=3)
+    mirror: bool | None = None
+
+
+SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|live_[0-9]{8,14})$")
 
 
 class ControlBody(BaseModel):
@@ -377,6 +388,100 @@ def create_app(ctx: ApiContext) -> FastAPI:
         return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 
+    # ---- camera setup ----
+
+    def the_app():
+        a = ctx.extra.get("app")
+        if a is None:
+            raise HTTPException(409, "not available in this mode")
+        return a
+
+    def frame_meta(a, name: str) -> dict:
+        p = a.frames_dir / f"{name}.json"
+        return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+
+    @app.get("/api/camera-setup", dependencies=[Depends(auth)])
+    async def camera_setup_get() -> dict:
+        a = the_app()
+        frames = []
+        if a.frames_dir.is_dir():
+            for p in sorted(a.frames_dir.glob("*.json")):
+                if SETUP_FRAME_RE.match(p.stem) and p.with_suffix(".jpg").is_file():
+                    m = json.loads(p.read_text(encoding="utf-8"))
+                    frames.append({k: m.get(k) for k in ("name", "bed_z", "utc", "file", "height_now")} | {"objects": len(m.get("objects") or [])})
+        st = a.tracker.status
+        return {"ready": a.camera_setup.ready, "rms_px": a.camera_setup.data.get("rms_px"),
+                "rotation": a.camera_setup.data.get("rotation", 0), "mirror": a.camera_setup.data.get("mirror", False),
+                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames,
+                "bed_z_now": a._bed_z(), "homed": st.get("toolhead", {}).get("homed_axes", ""),
+                "print_state": a.tracker.print_state}
+
+    @app.get("/api/camera-setup/frames/{name}", dependencies=[Depends(auth)])
+    async def camera_setup_frame(name: str):
+        a = the_app()
+        if not SETUP_FRAME_RE.match(name) or not (a.frames_dir / f"{name}.jpg").is_file():
+            raise HTTPException(404, "no such picture")
+        return FileResponse(a.frames_dir / f"{name}.jpg", media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/camera-setup/frames", dependencies=[Depends(auth)])
+    async def camera_setup_save_live() -> dict:
+        a = the_app()
+        jpeg = await a._fresh_frame()
+        z = a._bed_z()
+        if not jpeg:
+            raise HTTPException(409, "No live camera picture right now. Turn on Auto camera, or open the camera in the app.")
+        if z is None:
+            raise HTTPException(409, "The printer did not report the bed height.")
+        name = "live_" + a.clock.now_utc().strftime("%Y%m%d%H%M%S")
+        return await a.save_frame(name, jpeg, z)
+
+    @app.put("/api/camera-setup", dependencies=[Depends(auth)])
+    async def camera_setup_put(body: SetupBody) -> dict:
+        a = the_app()
+        if body.clicks:
+            for c in body.clicks:
+                if not SETUP_FRAME_RE.match(str(c.get("frame", ""))):
+                    raise HTTPException(400, "unknown picture in the clicks")
+                m = frame_meta(a, c["frame"])
+                if not m:
+                    raise HTTPException(400, "a clicked picture no longer exists")
+                c["bed_z"] = m["bed_z"]
+            try:
+                a.camera_setup.set_clicks(body.clicks, body.rotation, body.mirror)
+            except (CalibrationErrorApi, KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+        elif body.rotation is not None or body.mirror is not None:
+            if not a.camera_setup.ready:
+                raise HTTPException(409, "Click the corners first.")
+            a.camera_setup.set_orientation(body.rotation if body.rotation is not None else a.camera_setup.data.get("rotation", 0),
+                                           body.mirror if body.mirror is not None else a.camera_setup.data.get("mirror", False))
+        return await camera_setup_get()
+
+    @app.delete("/api/camera-setup", dependencies=[Depends(auth)])
+    async def camera_setup_delete() -> dict:
+        the_app().camera_setup.clear()
+        return {"cleared": True}
+
+    @app.get("/api/camera-setup/overlay/{name}", dependencies=[Depends(auth)])
+    async def camera_setup_overlay(name: str) -> dict:
+        """Outlines to draw on a setup picture: the plate, and the part outlines at the plate and at their height."""
+        a = the_app()
+        if not SETUP_FRAME_RE.match(name):
+            raise HTTPException(404, "no such picture")
+        m = frame_meta(a, name)
+        if not m or not a.camera_setup.ready:
+            return {"lines": []}
+        z, top = m["bed_z"], m.get("height_now") or 0.0
+        to = a.camera_setup.to_image
+        lines = [{"kind": "plate", "pts": [to(x, y, 0, z) for x, y in ((0, 0), (270, 0), (270, 270), (0, 270), (0, 0))]}]
+        for o in m.get("objects") or []:
+            poly = [(float(p[0]), float(p[1])) for p in o["polygon"] if isinstance(p, list) and len(p) >= 2]
+            if len(poly) >= 3:
+                lines.append({"kind": "part", "pts": [to(x, y, 0, z) for x, y in poly + poly[:1]]})
+                if top:
+                    lines.append({"kind": "part_top", "pts": [to(x, y, top, z) for x, y in poly + poly[:1]]})
+        return {"lines": [ln for ln in lines if all(p is not None for p in ln["pts"])]}
+
     @app.get("/api/print/expected.png", dependencies=[Depends(auth)])
     async def expected_png():
         fn = ctx.extra.get("expected_picture")
@@ -578,6 +683,10 @@ def create_app(ctx: ApiContext) -> FastAPI:
         @app.get("/toolchanges", include_in_schema=False)
         async def toolchanges_page() -> FileResponse:
             return FileResponse(WEB_DIR / "toolchanges.html")
+
+        @app.get("/camera-setup", include_in_schema=False)
+        async def camera_setup_page() -> FileResponse:
+            return FileResponse(WEB_DIR / "camera-setup.html")
 
         @app.get("/settings", include_in_schema=False)
         async def settings_page() -> FileResponse:

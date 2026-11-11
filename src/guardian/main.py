@@ -22,6 +22,9 @@ import uvicorn
 
 from guardian.ai.diagnosis import Diagnoser
 from guardian.ai.gcode_view import GcodeFollower, draw_top
+from guardian.camera.calibration import CameraSetup
+from guardian.camera.match import decode as decode_jpeg
+from guardian.camera.match import score as match_score
 from guardian.ai.installer import OllamaInstaller
 from guardian.ai.vision import AiService, VisionWatcher
 from guardian.api.app import ApiContext, create_app
@@ -115,6 +118,13 @@ class App:
         self._gcode_task: asyncio.Task | None = None
         self._gcode_last = 0.0
         self.gcode_error: str | None = None
+        self.camera_setup = CameraSetup(cfg.storage.resolved_data_dir())
+        self.frames_dir = cfg.storage.resolved_data_dir() / "calibration" / "frames"
+        self._frames_this_print: set[str] = set()
+        self._frames_file: str | None = None
+        self._match_task: asyncio.Task | None = None
+        self._match_last = 0.0
+        self.match_history: list[dict] = []
         self.ai = AiService(cfg.ai, self.clock, key_fn=lambda: secrets_store.ai_key(self.cfg))
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
@@ -144,7 +154,8 @@ class App:
                                                 "latest_frame": self._latest_frame,
                                                 "set_ai_key": self.set_ai_key,
                                                 "cancel_autopause": self.autopause.cancel,
-                                                "expected_picture": self.expected_picture}))
+                                                "expected_picture": self.expected_picture,
+                                                "app": self}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.connected", self._on_reconnect)
@@ -248,6 +259,83 @@ class App:
                 log.info("could not read the print file: %s", self.gcode_error)
 
         self._gcode_task = asyncio.create_task(run())
+
+    # ---- camera setup pictures and the measured match ----
+
+    SETUP_HEIGHTS = (("z01", 0.0, 1.5), ("z10", 8.0, 12.0), ("z30", 27.0, 33.0), ("z50", 45.0, 55.0))
+
+    def _bed_z(self) -> float | None:
+        pos = self.tracker.status.get("toolhead", {}).get("position") or []
+        return float(pos[2]) if len(pos) > 2 and isinstance(pos[2], (int, float)) else None
+
+    def _objects(self) -> list[dict]:
+        out = []
+        for o in self.tracker.status.get("exclude_object", {}).get("objects") or []:
+            if isinstance(o, dict) and isinstance(o.get("polygon"), list):
+                out.append({"name": o.get("name"), "polygon": o["polygon"]})
+        return out
+
+    async def save_frame(self, name: str, jpeg: bytes, bed_z: float) -> dict:
+        """Keep one camera picture for the setup page, with the bed height and the part outlines."""
+        import json as _json
+        self.frames_dir.mkdir(parents=True, exist_ok=True)
+        meta = {"name": name, "bed_z": round(bed_z, 2), "utc": to_iso(self.clock.now_utc()),
+                "file": self.tracker.status.get("print_stats", {}).get("filename"),
+                "height_now": round(self.gcode.plate.max_z, 2) if self.gcode.filename else 0.0, "objects": self._objects()}
+        (self.frames_dir / f"{name}.jpg").write_bytes(jpeg)
+        (self.frames_dir / f"{name}.json").write_text(_json.dumps(meta), encoding="utf-8")
+        live = sorted(self.frames_dir.glob("live_*.json"))
+        for old in live[:-4]:  # keep the last 4 hand-saved pictures
+            old.unlink(missing_ok=True)
+            old.with_suffix(".jpg").unlink(missing_ok=True)
+        return meta
+
+    async def _save_setup_frame(self) -> None:
+        name = self.tracker.status.get("print_stats", {}).get("filename")
+        if name != self._frames_file:
+            self._frames_file, self._frames_this_print = name, set()
+        z = self._bed_z()
+        if z is None:
+            return
+        for tag, lo, hi in self.SETUP_HEIGHTS:
+            if lo <= z <= hi and tag not in self._frames_this_print:
+                jpeg = await self._fresh_frame()
+                if jpeg:
+                    self._frames_this_print.add(tag)
+                    await self.save_frame(tag, jpeg, z)
+                    log.info("saved a camera setup picture at bed height %.1f mm", z)
+
+    def _run_match(self) -> None:
+        if not self.camera_setup.ready or (self._match_task and not self._match_task.done()):
+            return
+        now = self.clock.monotonic()
+        if now - self._match_last < 60 or not self.gcode.plate.max_z:
+            return
+        self._match_last = now
+        z = self._bed_z()
+        pos = self.tracker.status.get("toolhead", {}).get("position") or []
+
+        async def run() -> None:
+            jpeg = await self._fresh_frame()
+            if not jpeg or z is None:
+                return
+            rgb = await asyncio.to_thread(decode_jpeg, self.ffmpeg, jpeg)
+            if not rgb:
+                return
+            res = await asyncio.to_thread(match_score, rgb, self.camera_setup, self.gcode.plate, z,
+                                          (pos[0], pos[1]) if len(pos) > 1 else None)
+            if res:
+                self.match_history.append({"utc": to_iso(self.clock.now_utc()), "bed_z": round(z, 2), **res.as_dict()})
+                del self.match_history[:-240]
+
+        self._match_task = asyncio.create_task(run())
+
+    def match_status(self) -> dict:
+        h = self.match_history
+        last = h[-1] if h else None
+        return {"setup_ready": self.camera_setup.ready, "rms_px": self.camera_setup.data.get("rms_px"),
+                "last": last, "count": len(h),
+                "note": "Watch only. Guardian records these scores to learn what is normal before it may act on them."}
 
     def expected_picture(self) -> bytes | None:
         """The plate as the print file says it should be now (PNG), or None."""
@@ -401,6 +489,7 @@ class App:
             "autopause": self.autopause.status(),
             "controls": {"enabled": self.cfg.controls.enabled},
             "blackbox": {"pre_s": self.cfg.blackbox.pre_trigger_s, "post_s": self.cfg.blackbox.post_trigger_s},
+            "match": self.match_status(),
             "print_file": {"read_mb": round(self.gcode.read_upto / 1e6, 1) if self.gcode.filename else 0,
                            "max_z_mm": round(self.gcode.plate.max_z, 2), "error": self.gcode_error,
                            "has_picture": bool(self.gcode.filename and self.gcode.plate.max_z)},
@@ -505,6 +594,8 @@ class App:
                 if self.tracker.print_state in ("printing", "paused"):
                     await self._refresh_file_meta()
                     self._follow_gcode()
+                    await self._save_setup_frame()
+                    self._run_match()
                 await self.vision.tick()
                 if self.cfg.ai.enabled:
                     await self.ai.refresh()  # at most once a minute, so the dashboard shows the real AI state

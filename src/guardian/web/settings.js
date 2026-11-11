@@ -233,7 +233,8 @@ function render() {
     const em = ((Shell.status || {}).notifications || {}).email || {};
     return el("section", { class: "card", "aria-label": name },
       el("div", { class: "card-h" }, ic(GROUP_ICON[name] || "i-sliders"), el("h2", { class: "card-title" }, isAi ? "AI" : name),
-        isAi ? el("span", { class: "right" }, badge("t-ai", "i-info", "AI guesses can be wrong"))
+        name === "Camera" ? el("a", { class: "btn btn-secondary btn-sm right", href: "/camera-setup" }, ic("i-eye", "sm"), "Camera setup")
+          : isAi ? el("span", { class: "right" }, badge("t-ai", "i-info", "AI guesses can be wrong"))
           : isMail ? el("span", { class: "right" }, em.configured ? badge("t-ok", "i-check", "API key found") : badge("t-warn", "i-alert", "No API key")) : null),
       el("div", { class: "card-b" }, ...list.map(field), isAi ? aiBox : null,
         isMail && em.enabled && em.configured ? el("div", { class: "row" }, el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: async (ev) => {
