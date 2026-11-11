@@ -176,7 +176,11 @@ def extract_frames(ffmpeg: str, clip: Path, times_s: list[float]) -> list[bytes]
 
 def email_text(row: Any, d: dict, link: str) -> tuple[str, str]:
     subject = f"[Guardian] AI diagnosis: {row['event_type']}" + (f" on {row['print_filename']}" if row["print_filename"] else "")
-    lines = ["U1 Guardian asked the local AI what happened. This is an AI guess and can be wrong.", "",
+    status = row["recording_status"]
+    footage = {"complete": "Footage: saved.", "partial": "Footage: PARTIAL. " + (row["recording_notes"] or ""),
+               "missing": "Footage: NONE. " + (row["recording_notes"] or ""),
+               "failed": "Footage: could not be saved. " + (row["recording_notes"] or "")}.get(status, "Footage: " + status)
+    lines = ["U1 Guardian asked the AI what happened. This is an AI guess and can be wrong.", "", footage.strip(), "",
              str(d.get("summary") or ""), "",
              f"Likely cause: {d.get('likely_cause') or 'not given'} (confidence: {d.get('confidence') or 'unknown'})",
              f"Safe to resume: {d.get('safe_to_resume') or 'unknown'}"]

@@ -48,10 +48,14 @@ class _Job:
 
 class NotificationManager:
     def __init__(self, cfg: NotificationsConfig, db: Database, bus: EventBus, channels: list[Channel],
-                 clock: Clock | None = None, *, retry_delays_s: tuple[float, ...] = (2.0, 8.0)) -> None:
+                 clock: Clock | None = None, *, retry_delays_s: tuple[float, ...] = (2.0, 8.0),
+                 diagnosis_coming=None) -> None:
         self.cfg, self.db, self.channels = cfg, db, channels
         self.clock = clock or SystemClock()
         self.retry_delays_s = retry_delays_s  # 3 tries in total
+        # (uid) -> True when an AI diagnosis email will follow. Then the "clip ready" email is skipped, because
+        # the diagnosis email also says how the footage went. Owner asked for fewer emails (2026-11-11).
+        self.diagnosis_coming = diagnosis_coming
         self._queue: asyncio.Queue[_Job] = asyncio.Queue(maxsize=500)
         self._last_sent: dict[str, datetime] = {}  # event type -> time, for the cooldown
         self._sent_rank: dict[str, int] = {}  # uid -> highest severity already announced
@@ -122,6 +126,13 @@ class NotificationManager:
         else:
             if job.uid not in self._created_sent:
                 return self._skip(job, "no created message was sent for this incident")
+            if self.diagnosis_coming and "diagnosis" in self.cfg.send_on:
+                try:
+                    coming = self.diagnosis_coming(job.uid)
+                except Exception:  # noqa: BLE001
+                    coming = False
+                if coming:
+                    return self._skip(job, "the AI diagnosis email follows and includes the footage status")
             subject, text = self._clip_message(row)
         sent_any = False
         for ch in self.channels:

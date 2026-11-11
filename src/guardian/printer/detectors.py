@@ -27,6 +27,10 @@ log = logging.getLogger(__name__)
 # The printer's own camera AI (Snapmaker `defect_detection.py` on the U1, read over SSH 2026-11-09).
 # On a find it raises exception id 532 with these codes and then normally pauses the print itself.
 # Read from the printer's source code. Not yet seen happen on a real print, so UNVERIFIED live.
+# Printer replies that only say a request did not apply (seen on the real U1, 2026-11-11). Not a problem.
+HARMLESS = ("not in paused state", "cannot be resumed", "print already paused", "cannot pause while not printing",
+            "cannot resume while not printing")
+
 AI_EXCEPTION_ID = 532
 AI_DETECTIONS = {
     1: ("bed_not_clear", "The printer's camera check found something on the build plate."),
@@ -65,8 +69,10 @@ class Detector:
         elif method == "notify_gcode_response":
             for line in params:
                 if isinstance(line, str) and line.startswith("!!"):
-                    await self._fire("klipper_error_response", "klipper", "warning", line,
-                                     {"message": line})
+                    harmless = any(h in line.lower() for h in HARMLESS)
+                    await self._fire("klipper_error_response", "klipper", "info" if harmless else "warning", line,
+                                     {"message": line, "summary": "The printer refused a request that did not apply right then."
+                                      if harmless else None})
         elif method in ("notify_klippy_shutdown", "notify_klippy_disconnected"):
             # Standard Moonraker notifications. UNVERIFIED on the U1 (never seen yet).
             await self._fire(method.removeprefix("notify_"), "klipper", "critical", None, {})
@@ -89,7 +95,8 @@ class Detector:
                 "message": ex.get("message"), "summary": summary,
             })
             return
-        await self._fire("printer_exception", "moonraker", "warning", key, {
+        harmless = any(h in str(ex.get("message", "")).lower() for h in HARMLESS)
+        await self._fire("printer_exception", "moonraker", "info" if harmless else "warning", key, {
             "exception_id": ex.get("id"), "code": ex.get("code"), "level": ex.get("level"),
             "index": ex.get("index"), "message": ex.get("message"),
         })

@@ -4,8 +4,11 @@
   seen on a real U1 about 30 s into a print). That is when the bed is in view. If that step does not
   come within BED_FALLBACK_S, the check runs then. Two pictures 5 s apart must both say "not clear".
   If the model says it cannot see the plate, there is no verdict.
-- Print check: every `print_check_every_s` once the print has run PRINT_CHECK_AFTER_S. A positive
-  answer is checked again with a new picture 10 s later before `ai_print_failure` is reported.
+- Print check: every `print_check_every_s` once the print has run PRINT_CHECK_AFTER_S. It needs
+  PRINT_CONFIRMATIONS positive answers in a row (spaced CONFIRM_SPACING_S apart) before `ai_print_failure`
+  is reported, and then stays quiet for REPORT_QUIET_S. Each question says what is being printed.
+  (Seen 2026-11-11: with one picture and a 10 s second look, half printed sheep were called "knocked over
+  bowls" again and again, which paused a good print twice.)
 
 Both are `critical` and can pause the print through auto pause (owner's choice, 2026-11-09).
 How well the models do on U1 pictures is UNVERIFIED. Every check result is kept for review.
@@ -31,7 +34,10 @@ BED_FALLBACK_S = 120.0
 BED_WINDOW_S = 240.0
 PRINT_CHECK_AFTER_S = 300.0
 CONFIRM_BED_S = 5.0
-CONFIRM_PRINT_S = 10.0
+CONFIRM_PRINT_S = 10.0  # kept for older callers, no longer used by the print check
+PRINT_CONFIRMATIONS = 3
+CONFIRM_SPACING_S = 45.0
+REPORT_QUIET_S = 1800.0
 AVAILABILITY_EVERY_S = 60.0
 REMOTE_CHECK_EVERY_S = 600.0  # a paid service: do not ask it every minute
 
@@ -56,6 +62,26 @@ BED_PROMPT = ("This picture was taken at the start of a print. First describe in
        "The printer's own parts, the docks and the purge bin do not count. If you cannot see the build plate, say so.\n"
        'JSON: {"description": "one sentence", "plate_visible": true or false, "clear": true or false, '
        '"objects": ["things on the plate"], "confidence": a number from 0 to 1}')
+
+
+def context_text(c: dict) -> str:
+    """What is being printed, so the model does not mistake half printed parts for a failure."""
+    if not c:
+        return ""
+    lines = ["WHAT IS BEING PRINTED (from the print file):"]
+    if c.get("objects"):
+        names = sorted({str(n).split("_ID_")[0].split(".STL")[0].split(".stl")[0] for n in c["objects"]})
+        lines.append(f"- {len(c['objects'])} object(s): {', '.join(names[:5])}.")
+    if c.get("layer") and c.get("total_layers"):
+        lines.append(f"- Layer {c['layer']} of {c['total_layers']} ({round(100 * c['layer'] / c['total_layers'])}% of the height).")
+    if c.get("height_now") and c.get("height_total"):
+        lines.append(f"- The parts are about {c['height_now']:.0f} mm tall now and will be {c['height_total']:.0f} mm tall when done.")
+    if c.get("colors"):
+        lines.append(f"- Filament colors: {', '.join(c['colors'])}.")
+    lines.append("- A partly printed object is often an open, hollow shell (it can look like a bowl or a cup) standing on a "
+                 "thin brim. That is normal, not a failure. Only call it a failure if a part is clearly loose, tipped "
+                 "over off its brim, or replaced by a tangle of strands.")
+    return "\n".join(lines) + "\n\n"
 
 
 def _conf(v: Any) -> float:
@@ -155,7 +181,9 @@ class VisionWatcher:
     def __init__(self, ai: AiService, clock: Clock, *, print_state: Callable[[], str | None],
                  get_frame: Callable[[], Awaitable[bytes | None]], report: ReportFn,
                  save_evidence: Callable[[Any, list[bytes]], Any] | None = None,
-                 action_code: Callable[[], Any] = lambda: None) -> None:
+                 action_code: Callable[[], Any] = lambda: None,
+                 context: Callable[[], dict] = lambda: {},
+                 failure_severity: Callable[[], str] = lambda: "critical") -> None:
         self.ai = ai
         self.cfg = ai.cfg
         self.clock = clock
@@ -164,6 +192,10 @@ class VisionWatcher:
         self._report = report
         self._save_evidence = save_evidence
         self._action_code = action_code
+        self._context = context
+        self._failure_severity = failure_severity
+        self._streak: list[tuple[bytes, dict]] = []
+        self._last_report: float | None = None
         self._warm_task: asyncio.Task | None = None
         self._prev_state: str | None = None
         self._seen_state = False
@@ -180,6 +212,7 @@ class VisionWatcher:
         state = self._print_state()
         if self._seen_state and state == "printing" and self._prev_state not in ("printing", "paused"):
             self._print_start, self._bed_done, self._last_print_check = self.clock.monotonic(), False, None
+            self._streak, self._last_report = [], None
             if self.cfg.enabled:  # load the model now, so the bed check does not wait a minute for it
                 self._warm_task = asyncio.create_task(self._warm())
         if state not in ("printing", "paused"):
@@ -203,7 +236,8 @@ class VisionWatcher:
                 self._task = asyncio.create_task(self._bed_check())
                 return
         if self.cfg.print_check and (since_start is None or since_start >= PRINT_CHECK_AFTER_S):
-            if self._last_print_check is None or now - self._last_print_check >= self.cfg.print_check_every_s:
+            every = min(self.cfg.print_check_every_s, CONFIRM_SPACING_S) if self._streak else self.cfg.print_check_every_s
+            if self._last_print_check is None or now - self._last_print_check >= every:
                 self._last_print_check = now
                 self._task = asyncio.create_task(self._print_check())
 
@@ -219,7 +253,8 @@ class VisionWatcher:
     async def _ask(self, kind: str, frame: bytes) -> dict | None:
         try:
             self.checks_run += 1
-            return await self.ai.ask(BED_PROMPT if kind == "bed" else PRINT_PROMPT, [frame])
+            prompt = BED_PROMPT if kind == "bed" else context_text(self._context()) + PRINT_PROMPT
+            return await self.ai.ask(prompt, [frame])
         except OllamaError as exc:
             self._remember(kind, None, f"AI error: {exc}")
             return None
@@ -255,31 +290,35 @@ class VisionWatcher:
                              [first, second], a, b)
 
     async def _print_check(self) -> None:
-        first = await self._frame()
-        if first is None:
+        frame = await self._frame()
+        if frame is None:
             self._remember("print", None, "skipped: no fresh camera picture")
             return
-        a = await self._ask("print", first)
+        a = await self._ask("print", frame)
         if a is None:
             return
         bad = (_bool(a.get("plate_visible")) is not False and _bool(a.get("failure")) is True
                and _conf(a.get("confidence")) >= self.cfg.min_confidence)
-        self._remember("print", a, "failure seen, checking again" if bad else "looks fine")
         if not bad:
+            self._remember("print", a, "looks fine" if not self._streak else "fine this time, no alert")
+            self._streak = []
             return
-        await asyncio.sleep(CONFIRM_PRINT_S)
-        if self._print_state() != "printing":
+        self._streak.append((frame, a))
+        n = len(self._streak)
+        if n < PRINT_CONFIRMATIONS:
+            self._remember("print", a, f"failure seen ({n} of {PRINT_CONFIRMATIONS} needed), checking again")
             return
-        second = await self._frame()
-        b = await self._ask("print", second) if second else None
-        if b is None:
+        now = self.clock.monotonic()
+        streak, self._streak = self._streak, []
+        if self._last_report is not None and now - self._last_report < REPORT_QUIET_S:
+            self._remember("print", a, "failure seen again, already reported in the last 30 minutes")
             return
-        confirmed = (_bool(b.get("plate_visible")) is not False and _bool(b.get("failure")) is True
-                     and _conf(b.get("confidence")) >= self.cfg.min_confidence)
-        self._remember("print", b, "failure (confirmed)" if confirmed else "fine on the second look, no alert")
-        if confirmed:
-            await self._fire("ai_print_failure", f"The AI sees a print failure ({b.get('kind') or a.get('kind')}): "
-                             f"{b.get('description') or a.get('description')}", [first, second], a, b)
+        self._last_report = now
+        self._remember("print", a, f"failure (confirmed {PRINT_CONFIRMATIONS} times)")
+        kinds = ", ".join(sorted({str(x.get("kind")) for _, x in streak if x.get("kind")})) or "unknown"
+        await self._fire("ai_print_failure", f"The AI saw a print failure ({kinds}) {PRINT_CONFIRMATIONS} times in a row: "
+                         f"{a.get('description')}", [f for f, _ in streak], streak[0][1], a,
+                         severity=self._failure_severity())
 
     async def _warm(self) -> None:
         try:
@@ -289,11 +328,12 @@ class VisionWatcher:
         except Exception:  # noqa: BLE001 - only a speed-up
             log.info("could not load the AI model ahead of time", exc_info=True)
 
-    async def _fire(self, event_type: str, summary: str, frames: list[bytes], a: dict, b: dict) -> None:
+    async def _fire(self, event_type: str, summary: str, frames: list[bytes], a: dict, b: dict,
+                    severity: str = "critical") -> None:
         meta = {"summary": summary, "model": self.cfg.active_model, "first_answer": a, "second_answer": b,
                 "note": "AI result. It can be wrong."}
         try:
-            result = await self._report(event_type, "guardian_ai", "critical", event_type, meta)
+            result = await self._report(event_type, "guardian_ai", severity, event_type, meta)
         except Exception:  # noqa: BLE001
             log.exception("could not report %s", event_type)
             return

@@ -17,6 +17,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
 import uvicorn
 
 from guardian.ai.diagnosis import Diagnoser
@@ -106,11 +107,16 @@ class App:
             send_pause=self.client.pause_print,
             note=lambda kind, meta: self.manager.add_note(kind, "guardian", meta),
             audit=lambda msg, meta: self.db.log("autopause", "warning", msg, meta))
+        self._file_meta: dict = {}
+        self._file_meta_tried: str | None = None
+        self._printer_port = printer_port or cfg.printer.moonraker_port
         self.ai = AiService(cfg.ai, self.clock, key_fn=lambda: secrets_store.ai_key(self.cfg))
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
                                     save_evidence=self._save_ai_pictures,
-                                    action_code=lambda: self.tracker.status.get("machine_state_manager", {}).get("action_code"))
+                                    action_code=lambda: self.tracker.status.get("machine_state_manager", {}).get("action_code"),
+                                    context=self.print_context,
+                                    failure_severity=lambda: "critical" if "ai_print_failure" in self.cfg.autopause.triggers else "warning")
         self.health = HealthWatch(self.clock, lambda: self.tracker.status, self._report)
         self.selftest_result: dict | None = None
         self.firmware_changed: tuple[str, str] | None = None  # (old, new)
@@ -118,7 +124,8 @@ class App:
         channels = []
         if cfg.notifications.email.enabled:
             channels.append(ResendEmailChannel(cfg.notifications.email))
-        self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock)
+        self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock,
+                                            diagnosis_coming=self._diagnosis_coming)
         self.ollama_installer = OllamaInstaller(lambda: self.ai.ollama.version())
         self.diagnoser = Diagnoser(cfg, self.db, self.ai, self.clock, self.ffmpeg,
                                    notify=self.notifier.send_diagnosis)
@@ -188,6 +195,47 @@ class App:
         self.db.log("settings", "info", "AI API key " + ("saved" if key else "removed") + " from the dashboard")
         await self.ai.refresh(force=True)
         return {"set": bool(key), "status": self.ai.status()}
+
+    def _diagnosis_coming(self, uid: str) -> bool:
+        row = self.db.get_incident_by_uid(uid)
+        if row is None or not self.cfg.ai.enabled or not self.ai.usable:
+            return False
+        from guardian.ai.diagnosis import wanted
+        types = {e["event_type"] for e in self.db.list_events(row["id"])}
+        return wanted(self.cfg.ai.diagnose, row, types)
+
+    def print_context(self) -> dict:
+        """What is being printed, for the AI checks (from the printer's live state and the file's info)."""
+        st = self.tracker.status
+        ps = st.get("print_stats", {})
+        info = ps.get("info") or {}
+        meta = self._file_meta if self._file_meta.get("filename") == ps.get("filename") else {}
+        objects = [o.get("name") for o in (st.get("exclude_object", {}).get("objects") or []) if isinstance(o, dict)]
+        pos = st.get("toolhead", {}).get("position") or []
+        used = st.get("print_task_config", {}).get("extruders_used") or []
+        colors = [c for i, c in enumerate(meta.get("colors") or []) if i < len(used) and used[i]] or meta.get("colors") or []
+        return {"file": ps.get("filename"), "objects": objects, "layer": info.get("current_layer"),
+                "total_layers": info.get("total_layer") or meta.get("layer_count"),
+                "height_now": pos[2] if len(pos) > 2 and isinstance(pos[2], (int, float)) else None,
+                "height_total": meta.get("object_height"), "colors": sorted(set(colors))}
+
+    async def _refresh_file_meta(self) -> None:
+        """Read the print file's info (height, layers, colors) once per print. Read only."""
+        name = self.tracker.status.get("print_stats", {}).get("filename")
+        if not name or self._file_meta.get("filename") == name or self._file_meta_tried == name:
+            return
+        self._file_meta_tried = name
+        url = f"http://{self.cfg.printer.host}:{self._printer_port}/server/files/metadata"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as c:
+                r = await c.get(url, params={"filename": name})
+            m = r.json().get("result", {})
+        except Exception:  # noqa: BLE001 - only extra detail for the AI
+            log.info("could not read the print file's info", exc_info=True)
+            return
+        hexes = [h.strip() for h in str(m.get("filament_colour") or "").split(";") if h.strip()]
+        self._file_meta = {"filename": name, "object_height": m.get("object_height"), "layer_count": m.get("layer_count"),
+                           "colors": [color_name(h) for h in hexes]}
 
     async def printer_control(self, action: str) -> dict:
         """Pause, Resume or Stop from the dashboard. A person clicked and confirmed. Raises ValueError."""
@@ -413,6 +461,8 @@ class App:
             except Exception:  # noqa: BLE001
                 log.exception("auto pause tick failed")
             try:
+                if self.tracker.print_state in ("printing", "paused"):
+                    await self._refresh_file_meta()
                 await self.vision.tick()
                 if self.cfg.ai.enabled:
                     await self.ai.refresh()  # at most once a minute, so the dashboard shows the real AI state
@@ -426,6 +476,19 @@ class App:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:
                 pass
+
+
+def color_name(hexcode: str) -> str:
+    """A plain color word for a filament hex code like #FFEBCB (the AI understands words better than hex)."""
+    names = {"white": (255, 255, 255), "cream": (255, 235, 200), "black": (20, 20, 20), "grey": (128, 128, 128),
+             "red": (220, 30, 30), "orange": (255, 150, 10), "yellow": (250, 220, 30), "green": (40, 170, 60),
+             "blue": (30, 80, 220), "purple": (130, 50, 180), "pink": (255, 130, 180), "brown": (120, 70, 30)}
+    try:
+        h = hexcode.lstrip("#")
+        rgb = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return hexcode
+    return min(names, key=lambda n: sum((a - b) ** 2 for a, b in zip(names[n], rgb)))
 
 
 def main(argv: list[str] | None = None) -> int:

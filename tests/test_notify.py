@@ -368,3 +368,19 @@ def test_api_notification_endpoints_need_the_token(tmp_path):
     assert c.post("/api/notifications/test", json={}).status_code == 401
     assert c.get("/api/notifications/log").status_code == 401
     assert c.get("/api/notifications/log", headers={"X-Guardian-Token": "s3cret"}).status_code == 200
+
+
+async def test_no_clip_email_when_the_ai_diagnosis_follows(tmp_path):
+    """Owner got 3 emails per incident (2026-11-11). With a diagnosis coming, the clip email is skipped."""
+    r = Rig(tmp_path)
+    r.mgr.diagnosis_coming = lambda uid: True
+    uid, iid = r.incident()
+    await r.created(uid)
+    r.db.update_incident(iid, recording_status="complete")
+    await r.bus.publish("incident.finalized", {"uid": uid, "status": "complete"})
+    await r.mgr.drain()
+    assert len(r.fake.bodies) == 1
+    assert r.log()[-1]["status"] == "skipped" and "diagnosis email follows" in r.log()[-1]["error"]
+    await r.mgr.send_diagnosis(uid, "[Guardian] AI diagnosis", "Footage: saved.")
+    await r.mgr.drain()
+    assert len(r.fake.bodies) == 2

@@ -158,17 +158,50 @@ async def test_no_bed_check_when_guardian_starts_mid_print(monkeypatch):
     assert all("print is failing" in c["messages"][-1]["content"] for c in rig.fake.chats)
 
 
-async def test_print_failure_checked_twice_then_reported(monkeypatch):
-    fail = {"failure": True, "kind": "spaghetti", "confidence": 0.95, "reason": "Tangled strands."}
-    ok = {"clear": True, "confidence": 0.9}
-    rig = Rig([ok, fail, fail], monkeypatch, print_check_every_s=60)
+async def test_print_failure_needs_three_in_a_row(monkeypatch):
+    fail = {"plate_visible": True, "failure": True, "kind": "spaghetti", "confidence": 0.95, "description": "Tangled strands."}
+    ok = {"plate_visible": True, "clear": True, "failure": False, "confidence": 0.9}
+    rig = Rig([ok, fail, fail, fail], monkeypatch, print_check_every_s=60)
     await rig.run(1)
     rig.state = "printing"
     await rig.run(299)
     assert rig.reports == [] and len(rig.fake.chats) == 1  # only the bed check so far
-    await rig.run(3)
+    await rig.run(50)
+    assert rig.reports == [] and len(rig.fake.chats) == 3  # two positives, spaced 45 s apart
+    await rig.run(50)
     assert [r[0] for r in rig.reports] == ["ai_print_failure"]
-    assert "spaghetti" in rig.reports[0][2]["summary"]
+    assert "3 times in a row" in rig.reports[0][2]["summary"] and len(rig.saved[0]) == 3
+
+
+async def test_one_fine_answer_resets_the_streak(monkeypatch):
+    fail = {"plate_visible": True, "failure": True, "kind": "knocked_over", "confidence": 0.9}
+    fine = {"plate_visible": True, "failure": False, "confidence": 0.9}
+    rig = Rig([fine, fail, fail, fine, fail, fail], monkeypatch, print_check_every_s=60)
+    await rig.run(1)
+    rig.state = "printing"
+    await rig.run(299 + 60 * 6)
+    assert rig.reports == []
+
+
+async def test_quiet_after_a_report_and_warning_when_ai_cannot_pause(monkeypatch):
+    fail = {"plate_visible": True, "failure": True, "kind": "knocked_over", "confidence": 0.9}
+    rig = Rig([{"clear": True, "confidence": 0.9}] + [fail] * 20, monkeypatch, print_check_every_s=60)
+    rig.w._failure_severity = lambda: "warning"
+    await rig.run(1)
+    rig.state = "printing"
+    await rig.run(299 + 45 * 12)
+    assert [r[1] for r in rig.reports] == ["warning"]  # once, then quiet for 30 minutes
+
+
+async def test_the_question_says_what_is_printing(monkeypatch):
+    rig = Rig([{"clear": True, "confidence": 0.9}, {"failure": False, "confidence": 0.9}], monkeypatch)
+    rig.w._context = lambda: {"objects": ["SHEEP10.STL_ID_0_COPY_0"] * 10, "layer": 98, "total_layers": 287,
+                              "height_now": 19.7, "height_total": 57.5, "colors": ["white"]}
+    await rig.run(1)
+    rig.state = "printing"
+    await rig.run(305)
+    prompt = rig.fake.chats[-1]["messages"][-1]["content"]
+    assert "10 object(s): SHEEP10" in prompt and "Layer 98 of 287" in prompt and "hollow shell" in prompt
 
 
 async def test_no_fresh_picture_means_no_check(monkeypatch):

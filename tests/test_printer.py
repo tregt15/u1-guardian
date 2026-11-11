@@ -274,3 +274,32 @@ async def test_resume_and_cancel_only_with_controls_on():
         await task
         await mock.stop()
     assert mock.controls == ["printer.print.resume", "printer.print.cancel"] and mock.refused == []
+
+
+async def test_harmless_printer_replies_are_info():
+    bus = EventBus()
+    tracker = StateTracker(bus)
+    reports = []
+
+    async def report(event_type, source, severity, key, metadata):
+        reports.append((event_type, severity))
+
+    Detector(bus, tracker, report)
+    await bus.publish("printer.message", {"method": "notify_gcode_response",
+                                          "params": ["!! !! Not in paused state and cannot be resumed!"]})
+    await bus.publish("printer.message", {"method": "notify_gcode_response", "params": ["!! extruder[2]: error: wheel_speed"]})
+    assert reports == [("klipper_error_response", "info"), ("klipper_error_response", "warning")]
+
+
+async def test_harmless_printer_exception_is_info():
+    bus = EventBus()
+    tracker = StateTracker(bus)
+    reports = []
+
+    async def report(event_type, source, severity, key, metadata):
+        reports.append(severity)
+
+    Detector(bus, tracker, report)
+    await bus.publish("printer.message", {"method": "notify_exception_notification",
+                                          "params": [{"id": 1, "code": 2, "message": "!! Not in paused state and cannot be resumed!"}]})
+    assert reports == ["info"]
