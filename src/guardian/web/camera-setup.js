@@ -26,7 +26,7 @@ main.append(
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-info"), el("h2", { class: "card-title" }, "How it works")),
     el("div", { class: "card-b" }, el("ol", { class: "numlist" },
       el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves two pictures on the way up."),
-      el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden, click where it would be."),
+      el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden or off the picture, press \"Skip this corner\" instead of guessing. You need at least 6 clicks in all."),
       el("li", {}, "Do the same on a second picture with the bed at a different height (for example the start of a print and 30 mm later)."),
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
       el("p", { class: "small muted", style: "margin-top:8px" }, "Guardian only moves the bed here, only when no print is running, and only after you confirm the plate is empty."))),
@@ -40,9 +40,28 @@ main.append(
       el("button", { type: "button", class: "btn btn-primary", onclick: save }, "Save and check"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(1, null) }, "Turn the drawing"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(0, true) }, "Mirror the drawing"),
+      el("button", { type: "button", class: "btn btn-secondary", onclick: skipCorner }, "Skip this corner (can't see it)"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => { if (frame) { delete clicks[frame]; draw(); } } }, "Clear this picture"),
       el("button", { type: "button", class: "btn btn-danger-quiet", onclick: reset }, ic("i-trash", "sm"), "Start over")),
       fitBox)));
+
+// A corner that is hidden by the toolhead or off the picture is better left out than guessed. The fit needs only
+// 6 clicks in all, from 2 different bed heights.
+function skipCorner() {
+  if (!frame) return;
+  if (clicks[frame]) delete clicks[frame][corner];
+  corner = (corner + 1) % 4;
+  draw(); drawFrames();
+}
+
+function clickCount() {
+  return Object.values(clicks).reduce((n, cs) => n + Object.keys(cs).length, 0);
+}
+
+function errOf(f, i) {
+  const c = ((info && info.clicks) || []).find(k => k.frame === f && k.corner === Number(i));
+  return c ? c.err_px : null;
+}
 
 function drawCorners() {
   cornerBtns.replaceChildren(...CORNER_NAMES.map((n, i) => {
@@ -73,9 +92,13 @@ function draw() {
   }
   const mine = (frame && clicks[frame]) || {};
   for (const [i, p] of Object.entries(mine)) {
-    kids.push(el("circle", { cx: p[0], cy: p[1], r: 16, fill: "rgba(212,162,47,.35)", stroke: "#F2CD6E", "stroke-width": 4 }),
+    const e = info && info.ready ? errOf(frame, i) : null;
+    const loose = e != null && info.rms_px != null && e > Math.max(15, info.rms_px * 1.3);  // fits worse than most
+    const edge = p[0] < w * 0.01 || p[0] > w * 0.99 || p[1] < h * 0.01 || p[1] > h * 0.99;  // pinned to the picture edge
+    kids.push(el("circle", { cx: p[0], cy: p[1], r: 16, fill: loose || edge ? "rgba(220,70,70,.35)" : "rgba(212,162,47,.35)",
+        stroke: loose || edge ? "#FF7B7B" : "#F2CD6E", "stroke-width": 4 }),
       el("text", { x: p[0] + 22, y: p[1] - 18, fill: "#FFFFFF", stroke: "#0C101F", "stroke-width": 6, "paint-order": "stroke",
-        style: "font:700 44px system-ui,sans-serif" }, String(Number(i) + 1)));
+        style: "font:700 44px system-ui,sans-serif" }, String(Number(i) + 1) + (e != null ? " (" + Math.round(e) + " px off)" : "")));
   }
   svg.replaceChildren(...kids);
 }
@@ -117,7 +140,7 @@ function drawFit() {
   const good = info.rms_px != null && info.rms_px < 15;
   fitBox.replaceChildren(el("div", { class: "banner " + (good ? "t-ok" : "t-warn"), style: "margin-top:12px" }, ic(good ? "i-check" : "i-alert"),
     el("div", {}, el("div", { class: "b-title" }, "Set up. The clicks fit to about " + info.rms_px + " pixels."),
-      el("div", { class: "b-text" }, (good ? "That is good. " : "That is a bit loose. Check the corners. ") +
+      el("div", { class: "b-text" }, (good ? "That is good. " : "That is a bit loose. Red dots fit worst, or sit on the picture edge. Skip any corner you cannot really see, then save again. ") +
         "Yellow is the plate. Blue lines are the bottoms of the printed parts and green dashes their tops. Turned " +
         (info.rotation * 90) + " degrees" + (info.mirror ? ", mirrored." : ".")))));
 }
@@ -194,6 +217,8 @@ async function saveLive(ev) {
 }
 
 async function save() {
+  const n = clickCount();
+  if (n < 6) { toast("You have " + n + " clicks. The fit needs at least 6, from 2 pictures at different bed heights.", "t-warn"); return; }
   const list = [];
   for (const [f, cs] of Object.entries(clicks)) for (const [i, p] of Object.entries(cs)) list.push({ frame: f, corner: Number(i), u: p[0], v: p[1] });
   try { info = await api("/api/camera-setup", { method: "PUT", body: JSON.stringify({ clicks: list }) }); toast("Saved.", "t-ok"); }

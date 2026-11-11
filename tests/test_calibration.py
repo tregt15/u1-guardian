@@ -39,6 +39,22 @@ def test_noisy_clicks_still_fit_and_report_the_error(tmp_path):
     assert 0.5 < d["rms_px"] < 8
 
 
+def test_hidden_corners_can_be_skipped(tmp_path):
+    # Skip corner 1 at the high bed and corner 2 at the low bed: 6 points left, still a fit.
+    cl = [c for c in clicks_at(0.2, "a") if c["corner"] != 2] + [c for c in clicks_at(30.0, "b") if c["corner"] != 1]
+    assert len(cl) == 6
+    assert CameraSetup(tmp_path).set_clicks(cl)["rms_px"] < 0.5
+
+
+def test_a_bad_click_is_marked(tmp_path):
+    cl = clicks_at(0.2, "a") + clicks_at(30.0, "b")
+    cl[1]["u"] += 80  # a corner guessed at the wrong place
+    d = CameraSetup(tmp_path).set_clicks(cl)
+    errs = [c["err_px"] for c in d["clicks"]]
+    # The error spreads over the other points, so the bad click is not always the top one, but the fit gets worse.
+    assert d["rms_px"] > 5 and errs[1] > 5 and all("err_px" in c for c in d["clicks"])
+
+
 def test_one_height_or_too_few_points_is_refused():
     with pytest.raises(CalibrationError, match="different bed height"):
         solve_camera([(c["u"], c["v"], *CORNERS[c["corner"]], 0.0) for c in clicks_at(0, "a") + clicks_at(0, "b")])

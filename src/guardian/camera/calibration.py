@@ -143,6 +143,8 @@ class CameraSetup:
             q = project(p, x, y, z)
             errs.append(math.hypot(q[0] - u, q[1] - v) if q else 1e9)
         rms = math.sqrt(sum(e * e for e in errs) / len(errs))
+        # Per click error, so the page can mark the click that fits worst (often a guessed or off-screen corner).
+        clicks = [dict(c, err_px=round(e, 1)) for c, e in zip(clicks, errs)]
         self.data.update({"clicks": clicks, "P": p, "rms_px": round(rms, 1),
                           "rotation": self.data.get("rotation", 0) if rotation is None else int(rotation) % 4,
                           "mirror": self.data.get("mirror", False) if mirror is None else bool(mirror)})
