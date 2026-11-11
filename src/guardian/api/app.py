@@ -377,6 +377,14 @@ def create_app(ctx: ApiContext) -> FastAPI:
         return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 
+    @app.get("/api/print/expected.png", dependencies=[Depends(auth)])
+    async def expected_png():
+        fn = ctx.extra.get("expected_picture")
+        data = await asyncio.to_thread(fn) if fn else None
+        if not data:
+            raise HTTPException(404, "no drawing from the print file right now")
+        return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
+
     @app.get("/api/camera/latest", dependencies=[Depends(auth)])
     async def camera_latest():
         fn = ctx.extra.get("fresh_frame")

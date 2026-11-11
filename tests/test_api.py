@@ -335,3 +335,12 @@ def test_toolchange_summary_for_the_last_print(tmp_path):
     s = env.client.get("/api/toolchanges/summary").json()
     assert s["print_filename"] == "new.gcode" and s["total"] == 3 and s["counts"] == {"ok": 2, "timeout": 1}
     assert s["median_ms"] == 4200 and s["slowest_recent"]["duration_ms"] == 4200 and len(s["points"]) == 3
+
+
+def test_expected_drawing_endpoint(tmp_path):
+    env = make_env(tmp_path)
+    assert env.client.get("/api/print/expected.png").status_code == 404
+    env.ctx.extra["expected_picture"] = lambda: b"\x89PNG fake"
+    env.client = TestClient(create_app(env.ctx))
+    r = env.client.get("/api/print/expected.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content.startswith(b"\x89PNG")

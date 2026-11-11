@@ -154,10 +154,34 @@ function drawTop(s) {
     nodes.push(el("section", { class: "card", "aria-labelledby": "cam-h" },
       el("div", { class: "card-h" }, ic("i-camera"), el("h2", { class: "card-title", id: "cam-h" }, "Live camera"),
         el("span", { class: "small muted right" }, c.last_frame_utc ? "Picture " + ago(c.last_frame_utc) : "No picture yet")),
-      el("div", { class: "card-b" }, camBox(s), el("p", { class: "cam-note" }, camNote(s)))));
+      el("div", { class: "card-b" }, camBox(s), el("p", { class: "cam-note" }, camNote(s)), expectedBox(s))));
   }
   parts.top.className = "dash-top" + (state === "paused" ? " solo" : "");
   parts.top.replaceChildren(...nodes);
+}
+
+// The plate as the print file says it should look now (drawn from the G-code, seen from above).
+let expImg = null, expAt = 0, expFold = null, expNote = null;
+function expectedBox(s) {
+  const pf = s.print_file || {};
+  if (!pf.has_picture || !["printing", "paused"].includes((s.printer || {}).print_state)) { expImg = null; expFold = null; return null; }
+  if (!expFold) {
+    expImg = el("img", { class: "live", alt: "Drawing of the plate from the print file" });
+    expNote = el("p", { class: "tiny muted", style: "margin-top:8px" });
+    expFold = el("details", { class: "fold", style: "margin-top:12px" },
+      el("summary", {}, ic("i-file"), "What the print file says should be on the plate", ic("i-chev-d", "chev")),
+      el("div", { class: "fold-b" }, el("div", { class: "cam", style: "aspect-ratio:1/1;max-width:360px" }, expImg), expNote));
+    expAt = 0;
+  }
+  if (Date.now() - expAt > 30000) {  // a new drawing every 30 s, swapped in only when it has loaded
+    expAt = Date.now();
+    const next = new Image();
+    next.onload = () => { expImg.src = next.src; };
+    next.src = "/api/print/expected.png?t=" + expAt + tokenQuery("&");
+  }
+  expNote.textContent = "Drawn from the G-code up to where the printer is now, seen from above. Brighter means taller (" +
+    pf.max_z_mm + " mm so far). It can be turned compared with the camera.";
+  return expFold;
 }
 
 // ---- paused panel ----

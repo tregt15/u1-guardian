@@ -21,6 +21,7 @@ import httpx
 import uvicorn
 
 from guardian.ai.diagnosis import Diagnoser
+from guardian.ai.gcode_view import GcodeFollower, draw_top
 from guardian.ai.installer import OllamaInstaller
 from guardian.ai.vision import AiService, VisionWatcher
 from guardian.api.app import ApiContext, create_app
@@ -110,6 +111,10 @@ class App:
         self._file_meta: dict = {}
         self._file_meta_tried: str | None = None
         self._printer_port = printer_port or cfg.printer.moonraker_port
+        self.gcode = GcodeFollower(f"http://{cfg.printer.host}:{self._printer_port}")
+        self._gcode_task: asyncio.Task | None = None
+        self._gcode_last = 0.0
+        self.gcode_error: str | None = None
         self.ai = AiService(cfg.ai, self.clock, key_fn=lambda: secrets_store.ai_key(self.cfg))
         self.vision = VisionWatcher(self.ai, self.clock, print_state=lambda: self.tracker.print_state,
                                     get_frame=self._fresh_frame, report=self._report,
@@ -138,7 +143,8 @@ class App:
                                                 "control": self.printer_control,
                                                 "latest_frame": self._latest_frame,
                                                 "set_ai_key": self.set_ai_key,
-                                                "cancel_autopause": self.autopause.cancel}))
+                                                "cancel_autopause": self.autopause.cancel,
+                                                "expected_picture": self.expected_picture}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
         self.bus.subscribe("printer.connected", self._on_reconnect)
@@ -219,6 +225,38 @@ class App:
                 "height_now": pos[2] if len(pos) > 2 and isinstance(pos[2], (int, float)) else None,
                 "height_total": meta.get("object_height"), "colors": sorted(set(colors))}
 
+    def _follow_gcode(self) -> None:
+        """Keep the plate height map up to date, every 30 s, in the background."""
+        if self._gcode_task and not self._gcode_task.done():
+            return
+        now = self.clock.monotonic()
+        if now - self._gcode_last < 30:
+            return
+        self._gcode_last = now
+        st = self.tracker.status
+        name = st.get("print_stats", {}).get("filename")
+        pos = st.get("virtual_sdcard", {}).get("file_position")
+        if not name or not isinstance(pos, int):
+            return
+
+        async def run() -> None:
+            try:
+                await self.gcode.update(name, pos)
+                self.gcode_error = None
+            except Exception as exc:  # noqa: BLE001 - only extra detail
+                self.gcode_error = f"{type(exc).__name__}: {exc}"
+                log.info("could not read the print file: %s", self.gcode_error)
+
+        self._gcode_task = asyncio.create_task(run())
+
+    def expected_picture(self) -> bytes | None:
+        """The plate as the print file says it should be now (PNG), or None."""
+        name = self.tracker.status.get("print_stats", {}).get("filename")
+        if not name or self.gcode.filename != name or not self.gcode.plate.max_z:
+            return None
+        colors = self._file_meta.get("hex") or []
+        return draw_top(self.gcode.plate, colors)
+
     async def _refresh_file_meta(self) -> None:
         """Read the print file's info (height, layers, colors) once per print. Read only."""
         name = self.tracker.status.get("print_stats", {}).get("filename")
@@ -235,7 +273,7 @@ class App:
             return
         hexes = [h.strip() for h in str(m.get("filament_colour") or "").split(";") if h.strip()]
         self._file_meta = {"filename": name, "object_height": m.get("object_height"), "layer_count": m.get("layer_count"),
-                           "colors": [color_name(h) for h in hexes]}
+                           "colors": [color_name(h) for h in hexes], "hex": hexes}
 
     async def printer_control(self, action: str) -> dict:
         """Pause, Resume or Stop from the dashboard. A person clicked and confirmed. Raises ValueError."""
@@ -363,6 +401,9 @@ class App:
             "autopause": self.autopause.status(),
             "controls": {"enabled": self.cfg.controls.enabled},
             "blackbox": {"pre_s": self.cfg.blackbox.pre_trigger_s, "post_s": self.cfg.blackbox.post_trigger_s},
+            "print_file": {"read_mb": round(self.gcode.read_upto / 1e6, 1) if self.gcode.filename else 0,
+                           "max_z_mm": round(self.gcode.plate.max_z, 2), "error": self.gcode_error,
+                           "has_picture": bool(self.gcode.filename and self.gcode.plate.max_z)},
             "selftest": {
                 "ok": self.selftest_result["ok"] if self.selftest_result else None,
                 "ran_utc": self.selftest_result["ran_utc"] if self.selftest_result else None,
@@ -463,6 +504,7 @@ class App:
             try:
                 if self.tracker.print_state in ("printing", "paused"):
                     await self._refresh_file_meta()
+                    self._follow_gcode()
                 await self.vision.tick()
                 if self.cfg.ai.enabled:
                     await self.ai.refresh()  # at most once a minute, so the dashboard shows the real AI state
