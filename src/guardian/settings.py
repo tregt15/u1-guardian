@@ -88,7 +88,7 @@ FIELDS: list[dict[str, Any]] = [
     {"key": "blackbox.post_trigger_s", "group": "Recording", "label": "Seconds after a problem", "kind": "number",
      "min": 0, "max": 600, "help": "Footage saved after the problem."},
     {"key": "notifications.email.enabled", "group": "Email alerts", "label": "Send email alerts", "kind": "bool",
-     "help": "Needs your own Resend API key in an environment variable (see the README)."},
+     "help": "Uses your own free Resend account. Paste your Resend API key below."},
     {"key": "notifications.email.to_addrs", "group": "Email alerts", "label": "Send to", "kind": "emails",
      "help": "One address per line."},
     {"key": "notifications.min_severity", "group": "Email alerts", "label": "Lowest severity to send", "kind": "choice",

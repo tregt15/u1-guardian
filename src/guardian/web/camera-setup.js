@@ -12,6 +12,7 @@ const svg = el("svg", { style: "position:absolute;inset:0;width:100%;height:100%
 stage.append(img, svg);
 const cornerBtns = el("div", { class: "seg", role: "radiogroup", "aria-label": "Which corner" });
 const fitBox = el("div");
+const noFrame = el("p", { class: "small muted" }, "Pick a picture above first. Then click the corners on it here.");
 const msg = el("p", { class: "small muted" });
 
 main.append(
@@ -30,7 +31,7 @@ main.append(
     el("div", { class: "card-b" }, frameList, msg)),
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-eye"), el("h2", { class: "card-title" }, "Click the corners"),
     el("span", { class: "right" }, cornerBtns)),
-    el("div", { class: "card-b" }, stage, el("div", { class: "row", style: "margin-top:12px" },
+    el("div", { class: "card-b" }, noFrame, stage, el("div", { class: "row", style: "margin-top:12px" },
       el("button", { type: "button", class: "btn btn-primary", onclick: save }, "Save and check"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(1, null) }, "Turn the drawing"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => orient(0, true) }, "Mirror the drawing"),
@@ -48,6 +49,9 @@ function drawCorners() {
 }
 
 function draw() {
+  stage.hidden = !frame;
+  cornerBtns.hidden = !frame;
+  noFrame.hidden = !!frame;
   drawCorners();
   const w = img.naturalWidth || 1920, h = img.naturalHeight || 1080;
   svg.setAttribute("viewBox", "0 0 " + w + " " + h);
@@ -93,7 +97,7 @@ function drawFrames() {
     style: f.name === frame ? "outline:3px solid var(--primary);outline-offset:2px" : null },
     el("img", { src: "/api/camera-setup/frames/" + f.name + tokenQuery(), alt: "Picture at bed height " + f.bed_z + " mm", loading: "lazy" }),
     el("span", {}, "Bed at " + f.bed_z + " mm" + (clicks[f.name] ? " \u00b7 " + Object.keys(clicks[f.name]).length + " of 4 clicked" : "")))));
-  if (!fr.length) frameList.replaceChildren(el("div", { class: "empty" }, el("div", { class: "strong" }, "No pictures yet"),
+  if (!fr.length) frameList.replaceChildren(el("div", { class: "empty", style: "grid-column:1 / -1" }, el("div", { class: "strong" }, "No pictures yet"),
     el("div", {}, "Guardian saves some at the start of your next print. Or raise the bed from the printer screen and press \"Use the live picture now\".")));
   msg.textContent = info ? "Bed height now: " + (info.bed_z_now != null ? info.bed_z_now.toFixed(1) + " mm" : "unknown") +
     (info.homed ? "." : ". The printer has not homed since the last print, so this height may not be exact.") : "";
@@ -150,3 +154,5 @@ async function reset() {
 }
 
 load();
+
+draw();

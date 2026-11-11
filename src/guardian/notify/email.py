@@ -25,20 +25,22 @@ class NotifyError(Exception):
 class ResendEmailChannel:
     name = "email"
 
-    def __init__(self, cfg: EmailConfig, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(self, cfg: EmailConfig, transport: httpx.AsyncBaseTransport | None = None, key_fn=None) -> None:
         self.cfg = cfg
         self._transport = transport  # tests pass a fake transport. No real network in tests.
+        # () -> key. The app passes one that also reads the key typed on the Settings page.
+        self._key_fn = key_fn or cfg.api_key
 
     @property
     def configured(self) -> bool:
-        return bool(self.cfg.api_key())
+        return bool(self._key_fn())
 
     async def send(self, subject: str, text: str) -> None:
-        key = self.cfg.api_key()
+        key = self._key_fn()
         if not key:
             raise NotifyError(
-                f"No Resend API key found. Set the {self.cfg.api_key_env} environment variable "
-                "(or RESEND_API_KEY) with your own key.", retryable=False)
+                "No Resend API key found. Paste your key in Settings, Email alerts (or set the "
+                f"{self.cfg.api_key_env} environment variable).", retryable=False)
         subject = " ".join(subject.split())[:200]  # file names come from the printer: no newlines
         payload = {"from": self.cfg.from_addr, "to": self.cfg.to_addrs, "subject": subject, "text": text}
         headers = {"Authorization": f"Bearer {key}", "User-Agent": f"u1-guardian/{__version__}"}

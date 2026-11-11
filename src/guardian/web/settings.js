@@ -204,6 +204,43 @@ async function afterSaveWithAiOn() {
   else toast("The AI needs Ollama, and it is not installed. " + (plan.manual || "See ollama.com/download"), "t-warn");
 }
 
+// ---- Resend key (email alerts) ----
+function mailKeyBox(em) {
+  const keyIn = el("input", { class: "input", type: "password", autocomplete: "off", "aria-label": "Resend API key",
+    placeholder: em.configured ? "Type a new key to replace it" : "re_... (paste your key)" });
+  const ext = (href, text) => el("a", { href, target: "_blank", rel: "noopener" }, text);
+  return el("div", { class: "field stack" },
+    el("div", {}, el("div", { class: "f-label" }, "Resend API key ",
+        em.configured ? badge("t-ok", "i-check", "Set (" + (em.key_hint || "") + ")") : badge("t-crit", "i-x", "Missing")),
+      el("div", { class: "f-hint" }, em.key_source === "env"
+        ? "Coming from an environment variable. It wins over a key typed here."
+        : "Kept in a separate file in Guardian's data folder. Never shown again, never in an export, only sent to Resend.")),
+    el("div", { class: "row", style: "width:100%" }, keyIn,
+      el("button", { type: "button", class: "btn btn-primary btn-sm", onclick: () => saveMailKey(keyIn.value) }, "Save key"),
+      em.key_source === "settings" ? el("button", { type: "button", class: "btn btn-danger-quiet btn-sm", onclick: () => saveMailKey("") },
+        ic("i-trash", "sm"), "Remove key") : null),
+    el("details", { class: "fold", style: "width:100%" },
+      el("summary", {}, ic("i-info"), "How to get a free Resend API key", ic("i-chev-d", "chev")),
+      el("div", { class: "fold-b" }, el("ol", { class: "numlist" },
+        el("li", {}, "Make a free account at ", ext("https://resend.com/signup", "resend.com/signup"), "."),
+        el("li", {}, "Open ", ext("https://resend.com/api-keys", "resend.com/api-keys"), " and click Create API key. Sending access is enough."),
+        el("li", {}, "Copy the key (it starts with re_). Resend shows it only once."),
+        el("li", {}, "Paste it above, click Save key, add your address under Send to, and save the settings."),
+        el("li", {}, "Click Send test email.")),
+        el("p", { class: "tiny muted", style: "margin-top:8px" }, "Resend's own guide: ",
+          ext("https://resend.com/docs/create-an-api-key", "resend.com/docs/create-an-api-key"),
+          ". The free test sender only delivers to the email address of your own Resend account. To email other people, add your own domain in Resend."))));
+}
+async function saveMailKey(value) {
+  if (!value.trim() && !await ask("Remove the saved Resend API key? Email alerts stop until a key is set.", { ok: "Remove", danger: true })) return;
+  try {
+    await api("/api/notifications/email/key", { method: "PUT", body: JSON.stringify({ key: value.trim() || null }) });
+    toast(value.trim() ? "Resend API key saved." : "Resend API key removed.", "t-ok");
+  } catch (e) { toast("Key not saved: " + e.message, "t-crit"); }
+  await Shell.poll();
+  render();
+}
+
 // ---- self-test ----
 function drawTest(r, running) {
   if (running) { testOut.replaceChildren(el("p", { class: "small muted" }, "Running...")); return; }
@@ -236,7 +273,7 @@ function render() {
         name === "Camera" ? el("a", { class: "btn btn-secondary btn-sm right", href: "/camera-setup" }, ic("i-eye", "sm"), "Camera setup")
           : isAi ? el("span", { class: "right" }, badge("t-ai", "i-info", "AI guesses can be wrong"))
           : isMail ? el("span", { class: "right" }, em.configured ? badge("t-ok", "i-check", "API key found") : badge("t-warn", "i-alert", "No API key")) : null),
-      el("div", { class: "card-b" }, ...list.map(field), isAi ? aiBox : null,
+      el("div", { class: "card-b" }, ...list.map(field), isAi ? aiBox : null, isMail ? mailKeyBox(em) : null,
         isMail && em.enabled && em.configured ? el("div", { class: "row" }, el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: async (ev) => {
           ev.target.disabled = true;
           try { await api("/api/notifications/test", { method: "POST", body: JSON.stringify({ channel: "email" }) }); toast("Test email sent. Check your inbox.", "t-ok"); }

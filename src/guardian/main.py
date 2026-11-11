@@ -138,7 +138,7 @@ class App:
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
-            channels.append(ResendEmailChannel(cfg.notifications.email))
+            channels.append(self._email_channel())
         self.notifier = NotificationManager(cfg.notifications, self.db, self.bus, channels, self.clock,
                                             diagnosis_coming=self._diagnosis_coming)
         self.ollama_installer = OllamaInstaller(lambda: self.ai.ollama.version())
@@ -420,6 +420,16 @@ class App:
             log.warning("self-test found problems: %s", [c for c in result["checks"] if not c["ok"]])
         return result
 
+    def _email_channel(self) -> ResendEmailChannel:
+        return ResendEmailChannel(self.cfg.notifications.email, key_fn=lambda: secrets_store.email_key(self.cfg)[0])
+
+    async def set_email_key(self, key: str | None) -> dict:
+        """Save or remove the Resend key typed on the Settings page. Raises ValueError. The key is never logged."""
+        secrets_store.put(self.cfg, secrets_store.EMAIL_KEY, key)
+        self.db.log("settings", "info", "Resend API key " + ("saved" if key else "removed") + " from the dashboard")
+        k, src = secrets_store.email_key(self.cfg)
+        return {"set": bool(k), "source": src, "hint": secrets_store.hint(k)}
+
     def _sync_write_permissions(self) -> None:
         """The client may only send the two opt-in requests while their settings allow it."""
         self.client.allow_camera_start = self.snapshot_mode and self.cfg.camera.keepalive != "off"
@@ -432,7 +442,7 @@ class App:
         self._sync_write_permissions()
         if any(k.startswith("notifications.email.") for k in changed):
             email = self.cfg.notifications.email
-            self.notifier.channels = [ResendEmailChannel(email)] if email.enabled else []
+            self.notifier.channels = [self._email_channel()] if email.enabled else []
         if changed:
             log.info("settings changed from the dashboard: %s", changed)
             self.db.log("settings", "info", "settings changed from the dashboard",
@@ -504,7 +514,9 @@ class App:
             "notifications": {"email": {
                 "enabled": self.cfg.notifications.email.enabled,
                 # Only whether a key exists. The key itself is never shown.
-                "configured": bool(self.cfg.notifications.email.api_key()),
+                "configured": bool(secrets_store.email_key(self.cfg)[0]),
+                "key_source": secrets_store.email_key(self.cfg)[1],
+                "key_hint": secrets_store.hint(secrets_store.email_key(self.cfg)[0]),
                 "to_count": len(self.cfg.notifications.email.to_addrs),
             }},
         }

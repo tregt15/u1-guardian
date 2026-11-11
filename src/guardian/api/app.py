@@ -627,6 +627,17 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         return {"changed": changed, "values": settings_mod.current(cfg)}
 
+    @app.put("/api/notifications/email/key", dependencies=[Depends(auth)])
+    async def email_key(body: AiKeyBody) -> dict:
+        """Save (or with an empty key, remove) the Resend API key. The key is never sent back."""
+        a = ctx.extra.get("app")
+        if a is None:
+            raise HTTPException(409, "not available in this mode")
+        try:
+            return await a.set_email_key(body.key or None)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.post("/api/notifications/test", dependencies=[Depends(auth)])
     async def notifications_test(body: TestBody) -> dict:
         if ctx.notifier is None:

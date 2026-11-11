@@ -146,13 +146,13 @@ Guardian can email you when an incident starts and again when the clip is ready.
 [Resend](https://resend.com). Guardian does not include a key and never pays for your email.
 You make your own free Resend account and key, so any cost is between you and Resend.
 
-1. Create a Resend account and an API key.
-2. Put the key in the environment variable `GUARDIAN_RESEND_KEY` (`RESEND_API_KEY` also works).
-   An easy way is a file named `.env` next to your `config.yaml`, with one line:
-   `GUARDIAN_RESEND_KEY=your_key_here`. The `.env` file is ignored by git. Never put the key in
-   `config.yaml` and never commit it.
-3. In `config.yaml`, set `notifications.email.enabled: true` and list your address in `to_addrs`.
-4. Open the dashboard and press "Send test email".
+1. Make a free account at [resend.com/signup](https://resend.com/signup).
+2. Open [resend.com/api-keys](https://resend.com/api-keys), click Create API key (sending access is enough) and copy it.
+   Resend shows it only once. Resend's own guide: [resend.com/docs/create-an-api-key](https://resend.com/docs/create-an-api-key).
+3. On Guardian's Settings page, under Email alerts, paste the key and click Save key. It is kept in a separate
+   `secrets.json` in Guardian's data folder, never shown again and never put in an export. (You can also use the
+   environment variable `GUARDIAN_RESEND_KEY` or `RESEND_API_KEY`, for example in a `.env` file. It wins.)
+4. Turn on "Send email alerts", add your address under "Send to", save, and click "Send test email".
 
 Resend's test sender (`onboarding@resend.dev`) only delivers to the email address of your own Resend
 account. To send to other people, verify your own domain in Resend and change `from_addr`.

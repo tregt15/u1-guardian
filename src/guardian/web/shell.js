@@ -226,7 +226,7 @@ const Shell = {
       "Guardian's checks were made on " + t.firmware_changed[0] + ". The printer now runs " + t.firmware_changed[1] + ". Run the self-test in Settings."]);
     if (t.ok === false) list.push(["t-warn", "i-alert", "The self-test found problems.", (t.problems || []).map(x => x.name + ": " + x.detail).join(". ")]);
     for (const w of st.warnings || []) list.push(["t-warn", "i-disk", "Storage", w]);
-    if (em.enabled && !em.configured) list.push(["t-warn", "i-mail", "Email alerts are on, but no Resend API key was found.", "Alerts will not be sent until a key is set."]);
+    if (em.enabled && !em.configured) list.push(["t-warn", "i-mail", "Email alerts are on, but no Resend API key was found.", "Paste your key in Settings, Email alerts. Alerts are not sent until then."]);
     this.banners.hidden = list.length === 0;
     this.banners.replaceChildren(...list.map(([tone, icon, head, text]) =>
       el("div", { class: "banner " + tone, role: "status" }, ic(icon),

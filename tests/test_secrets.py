@@ -81,3 +81,56 @@ async def test_ai_service_uses_the_saved_key(tmp_path):
     st = ai.status()
     assert st["api_key_source"] == "settings" and st["api_key_hint"] == "...0001"
     assert "sk-typed" not in json.dumps(st)
+
+
+def test_resend_key_from_settings_and_env_wins(tmp_path, monkeypatch):
+    monkeypatch.delenv("GUARDIAN_RESEND_KEY", raising=False)
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    cfg = make(tmp_path)
+    assert secrets_store.email_key(cfg) == ("", None)
+    secrets_store.put(cfg, secrets_store.EMAIL_KEY, "re_typed_in_page_42")
+    assert secrets_store.email_key(cfg) == ("re_typed_in_page_42", "settings")
+    assert secrets_store.ai_key(cfg) == ("", None)  # the two keys are kept apart
+    monkeypatch.setenv("GUARDIAN_RESEND_KEY", "re_from_env_77")
+    assert secrets_store.email_key(cfg) == ("re_from_env_77", "env")
+
+
+async def test_email_channel_sends_with_the_saved_key(tmp_path):
+    import httpx
+
+    from guardian.config import EmailConfig
+    from guardian.notify.email import ResendEmailChannel
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers["authorization"])
+        return httpx.Response(200, json={"id": "x"})
+
+    ch = ResendEmailChannel(EmailConfig(enabled=True, to_addrs=["me@example.com"]), transport=httpx.MockTransport(handler),
+                            key_fn=lambda: "re_saved_1234")
+    assert ch.configured
+    await ch.send("hi", "text")
+    assert seen == ["Bearer re_saved_1234"]
+
+
+def test_email_key_api_never_returns_the_key(tmp_path):
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    from guardian.api.app import create_app
+    from tests.test_api import make_env
+
+    env = make_env(tmp_path)
+    saved = {}
+
+    async def set_email_key(key):
+        saved["k"] = key
+        return {"set": bool(key), "source": "settings", "hint": secrets_store.hint(key or "")}
+
+    env.ctx.extra["app"] = SimpleNamespace(set_email_key=set_email_key)
+    client = TestClient(create_app(env.ctx))
+    r = client.put("/api/notifications/email/key", json={"key": "re_secret_value_9999"})
+    assert r.status_code == 200 and "re_secret_value_9999" not in r.text and "...9999" in r.text
+    assert saved["k"] == "re_secret_value_9999"

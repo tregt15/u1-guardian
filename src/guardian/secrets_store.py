@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 FILE = "secrets.json"
 AI_KEY = "ai_api_key"
+EMAIL_KEY = "resend_api_key"
 MAX_LEN = 500
 
 
@@ -68,6 +69,15 @@ def ai_key(cfg: Config) -> tuple[str, str | None]:
     if env:
         return env, "env"
     stored = get(cfg, AI_KEY)
+    return (stored, "settings") if stored else ("", None)
+
+
+def email_key(cfg: Config) -> tuple[str, str | None]:
+    """The Resend key: environment variable first (GUARDIAN_RESEND_KEY or RESEND_API_KEY), then the Settings page."""
+    env = cfg.notifications.email.api_key().strip()
+    if env:
+        return env, "env"
+    stored = get(cfg, EMAIL_KEY)
     return (stored, "settings") if stored else ("", None)
 
 
