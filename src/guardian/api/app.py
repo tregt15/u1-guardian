@@ -163,6 +163,8 @@ def create_app(ctx: ApiContext) -> FastAPI:
         resp.headers["X-Content-Type-Options"] = "nosniff"
         if request.url.path.startswith("/api/"):
             resp.headers.setdefault("Cache-Control", "no-store")
+        elif request.url.path.startswith("/static/"):
+            resp.headers.setdefault("Cache-Control", "no-cache")  # re-check each time, so an update shows at once
         return resp
 
     # ---- open endpoints ----
