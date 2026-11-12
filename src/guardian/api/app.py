@@ -94,7 +94,7 @@ class SetupBody(BaseModel):
     mirror: bool | None = None
 
 
-SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|setup_30|setup_05|live_[0-9]{8,14})$")
+SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|setup_30|setup_15|setup_05|live_[0-9]{8,14})$")
 
 
 class MoveBody(BaseModel):
