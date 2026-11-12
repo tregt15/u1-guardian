@@ -6,8 +6,10 @@ const CORNER_NAMES = ["1. Back left", "2. Back right", "3. Front right", "4. Fro
 let info = null, frame = null, corner = 0, clicks = {}, overlay = [];
 
 const frameList = el("div", { class: "thumbs" });
-const stage = el("div", { style: "position:relative;line-height:0;border-radius:12px;overflow:hidden;background:#1E222B" });
-const img = el("img", { alt: "Setup picture", style: "width:100%;display:block;cursor:crosshair" });
+// The picture sits in a dark border (12.5% of the width each side) so a corner just off the picture can still be clicked.
+// In picture pixels the border is 1/6 of the picture width.
+const stage = el("div", { style: "position:relative;line-height:0;border-radius:12px;overflow:hidden;background:#1E222B;box-sizing:border-box;padding:12.5%;cursor:crosshair" });
+const img = el("img", { alt: "Setup picture", style: "width:100%;display:block" });
 const svg = el("svg", { style: "position:absolute;inset:0;width:100%;height:100%;pointer-events:none" });
 stage.append(img, svg);
 const cornerBtns = el("div", { class: "seg", role: "radiogroup", "aria-label": "Which corner" });
@@ -26,7 +28,7 @@ main.append(
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-info"), el("h2", { class: "card-title" }, "How it works")),
     el("div", { class: "card-b" }, el("ol", { class: "numlist" },
       el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves three pictures on the way up (bed at 30, 7 and 5 mm)."),
-      el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden or off the picture, press \"Skip this corner\" instead of guessing. You need at least 6 clicks in all."),
+      el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is just off the picture, click where it would be in the dark border around the picture. If it is hidden or too far off, press \"Skip this corner\". You need at least 6 clicks in all."),
       el("li", {}, "Do the same on a second picture with the bed at a different height (for example the start of a print and 30 mm later)."),
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
       el("p", { class: "small muted", style: "margin-top:8px" }, "Guardian only moves the bed here, only when no print is running, and only after you confirm the plate is empty."))),
@@ -75,14 +77,15 @@ function drawCorners() {
 function draw() {
   const top = !!(info && info.bed_at_top);
   lockNote.hidden = top;
-  img.style.cursor = top ? "crosshair" : "not-allowed";
+  stage.style.cursor = top ? "crosshair" : "not-allowed";
   img.style.opacity = top ? "1" : ".55";
   stage.hidden = !frame;
   cornerBtns.hidden = !frame;
   noFrame.hidden = !!frame;
   drawCorners();
   const w = img.naturalWidth || 1920, h = img.naturalHeight || 1080;
-  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+  const pad = w / 6;
+  svg.setAttribute("viewBox", (-pad) + " " + (-pad) + " " + (w + 2 * pad) + " " + (h + 2 * pad));
   svg.setAttribute("preserveAspectRatio", "none");
   const kids = [];
   for (const ln of overlay) {
@@ -94,7 +97,7 @@ function draw() {
   for (const [i, p] of Object.entries(mine)) {
     const e = info && info.ready ? errOf(frame, i) : null;
     const loose = e != null && info.rms_px != null && e > Math.max(15, info.rms_px * 1.3);  // fits worse than most
-    const edge = p[0] < w * 0.01 || p[0] > w * 0.99 || p[1] < h * 0.01 || p[1] > h * 0.99;  // pinned to the picture edge
+    const edge = p[0] < -pad * 0.95 || p[0] > w + pad * 0.95 || p[1] < -pad * 0.95 || p[1] > h + pad * 0.95;  // pinned to the border edge
     kids.push(el("circle", { cx: p[0], cy: p[1], r: 16, fill: loose || edge ? "rgba(220,70,70,.35)" : "rgba(212,162,47,.35)",
         stroke: loose || edge ? "#FF7B7B" : "#F2CD6E", "stroke-width": 4 }),
       el("text", { x: p[0] + 22, y: p[1] - 18, fill: "#FFFFFF", stroke: "#0C101F", "stroke-width": 6, "paint-order": "stroke",
@@ -104,10 +107,10 @@ function draw() {
 }
 
 img.addEventListener("load", draw);
-img.addEventListener("click", (ev) => {
+stage.addEventListener("click", (ev) => {
   if (!frame || !(info && info.bed_at_top)) return;  // locked until the bed is at the very top
   const r = img.getBoundingClientRect();
-  const u = (ev.clientX - r.left) / r.width * (img.naturalWidth || 1920);
+  const u = (ev.clientX - r.left) / r.width * (img.naturalWidth || 1920);  // can be below 0 or past the width: a corner off the picture
   const v = (ev.clientY - r.top) / r.height * (img.naturalHeight || 1080);
   (clicks[frame] = clicks[frame] || {})[corner] = [u, v];
   corner = (corner + 1) % 4;
