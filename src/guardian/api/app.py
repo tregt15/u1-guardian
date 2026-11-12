@@ -94,6 +94,7 @@ class SetupBody(BaseModel):
     mirror: bool | None = None
 
 
+SETUP_SHOWN = ("setup_30", "setup_15", "setup_05")  # the only pictures the setup page lists
 SETUP_FRAME_RE = re.compile(r"^(z01|z10|z30|z50|setup_30|setup_15|setup_05|live_[0-9]{8,14})$")
 
 
@@ -415,13 +416,13 @@ def create_app(ctx: ApiContext) -> FastAPI:
         frames = []
         if a.frames_dir.is_dir():
             for p in sorted(a.frames_dir.glob("*.json")):
-                if SETUP_FRAME_RE.match(p.stem) and p.with_suffix(".jpg").is_file():
+                if p.stem in SETUP_SHOWN and p.with_suffix(".jpg").is_file():
                     m = json.loads(p.read_text(encoding="utf-8"))
                     frames.append({k: m.get(k) for k in ("name", "bed_z", "utc", "file", "height_now")} | {"objects": len(m.get("objects") or [])})
         st = a.tracker.status
         return {"ready": a.camera_setup.ready, "rms_px": a.camera_setup.data.get("rms_px"),
                 "rotation": a.camera_setup.data.get("rotation", 0), "mirror": a.camera_setup.data.get("mirror", False),
-                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames,
+                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames, "using_default": a.camera_setup.using_default,
                 "bed_z_now": a._bed_z(), "homed": st.get("toolhead", {}).get("homed_axes", ""),
                 "print_state": a.tracker.print_state, "bed_at_top": a.bed_at_top(), "move": a.setup_mover.status(),
                 "moves_allowed": a.cfg.controls.setup_moves, "last_print": a.last_print()}

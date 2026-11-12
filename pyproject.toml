@@ -29,7 +29,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-guardian = ["storage/schema.sql", "web/*"]
+guardian = ["storage/schema.sql", "web/*", "camera/default_calibration.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

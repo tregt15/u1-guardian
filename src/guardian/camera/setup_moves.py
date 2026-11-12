@@ -2,8 +2,9 @@
 
 This is the only time Guardian moves the printer. Steps, each waiting until the printer says it is done:
 1. Home all axes (G28). On the U1 the Z home is at the bottom (position_endstop 275), so the bed goes down.
-2. Raise the bed to Z 15 and save a camera picture.
-3. Raise the bed to Z 5 (the top used for the setup) and save a second picture.
+2. Raise the bed to Z 30 and save a camera picture.
+3. Raise the bed to Z 15 and save a second picture.
+4. Raise the bed to Z 5 (the top used for the setup) and save a third picture.
 
 Safety rules (a print left on the plate would hit the toolhead when the bed goes up):
 - Only when no print is running or paused, and the printer is connected.
@@ -23,7 +24,7 @@ from guardian.clock import Clock, to_iso
 
 log = logging.getLogger(__name__)
 
-HOME, Z15, Z5 = "G28", "G90\nG1 Z15 F600\nM400", "G90\nG1 Z5 F300\nM400"
+HOME, Z30, Z15, Z5 = "G28", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z15 F600\nM400", "G90\nG1 Z5 F300\nM400"
 TOP_Z = 6.0  # the bed counts as "at the top" at or below this Z (after homing)
 
 
@@ -80,6 +81,8 @@ class SetupMover:
     async def _run(self) -> None:
         try:
             await self._do("homing the printer", HOME)
+            await self._do("raising the bed to 30 mm", Z30)
+            await self._shoot("setup_30")
             await self._do("raising the bed to 15 mm", Z15)
             await self._shoot("setup_15")
             await self._do("raising the bed to the top (5 mm)", Z5)

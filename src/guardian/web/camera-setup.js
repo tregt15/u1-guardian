@@ -25,7 +25,7 @@ main.append(
       el("p", { class: "h-sub" }, "Show Guardian where the camera looks, so it can compare the camera with the print file.")))),
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-info"), el("h2", { class: "card-title" }, "How it works")),
     el("div", { class: "card-b" }, el("ol", { class: "numlist" },
-      el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves two pictures on the way up."),
+      el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves three pictures on the way up (bed at 30, 15 and 5 mm)."),
       el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden or off the picture, press \"Skip this corner\" instead of guessing. You need at least 6 clicks in all."),
       el("li", {}, "Do the same on a second picture with the bed at a different height (for example the start of a print and 30 mm later)."),
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
@@ -131,7 +131,7 @@ function drawFrames() {
     el("span", {}, "Bed at " + f.bed_z + " mm" + (clicks[f.name] ? " \u00b7 " + Object.keys(clicks[f.name]).length + " of 4 clicked" : "")))));
   if (!fr.length) frameList.replaceChildren(el("div", { class: "empty", style: "grid-column:1 / -1" }, el("div", { class: "strong" }, "No pictures yet"),
     el("div", {}, "Guardian saves some at the start of your next print. Or raise the bed from the printer screen and press \"Use the live picture now\".")));
-  msg.textContent = info ? "Bed height now: " + (info.bed_z_now != null ? info.bed_z_now.toFixed(1) + " mm" : "unknown") +
+  msg.textContent = info ? (info.using_default ? "Using Guardian's built in setup, made for the standard U1. Click and save your own if your camera or plate is different. " : "") + "Bed height now: " + (info.bed_z_now != null ? info.bed_z_now.toFixed(1) + " mm" : "unknown") +
     (info.homed ? "." : ". The printer has not homed since the last print, so this height may not be exact.") : "";
 }
 
@@ -236,7 +236,7 @@ async function orient(turn, mirror) {
 }
 
 async function reset() {
-  if (!await ask("Remove the camera setup and all clicks? The saved pictures stay.", { ok: "Start over", danger: true })) return;
+  if (!await ask("Remove your camera setup and clicks? Guardian goes back to its built in default setup, if it has one. The saved pictures stay.", { ok: "Start over", danger: true })) return;
   try { await api("/api/camera-setup", { method: "DELETE" }); } catch (e) { toast(e.message, "t-crit"); }
   frame = null; overlay = []; await load(); draw();
 }

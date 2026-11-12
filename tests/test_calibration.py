@@ -67,3 +67,21 @@ def test_orientation_turns_and_mirrors():
     assert orient(0, 0, 1, False) == (0, 270)
     assert orient(10, 20, 0, True) == (260, 20)
     assert orient(*orient(30, 40, 1, False), 3, False) == (30, 40)
+
+
+def test_shipped_default_is_used_until_the_person_saves_their_own(tmp_path, monkeypatch):
+    import json
+
+    import guardian.camera.calibration as cal
+
+    default = tmp_path / "default.json"
+    first = CameraSetup(tmp_path / "a")
+    first.set_clicks(clicks_at(0.2, "a") + clicks_at(30.0, "b"))
+    default.write_text(json.dumps(first.data), encoding="utf-8")
+    monkeypatch.setattr(cal, "DEFAULT_FILE", default)
+    fresh = CameraSetup(tmp_path / "b")  # a new install with no file of its own
+    assert fresh.ready and fresh.using_default
+    fresh.set_orientation(1, False)  # a change makes it the person's own
+    assert not fresh.using_default and CameraSetup(tmp_path / "b").data["rotation"] == 1
+    fresh.clear()  # Start over goes back to the default
+    assert fresh.using_default and fresh.data["rotation"] == first.data["rotation"]

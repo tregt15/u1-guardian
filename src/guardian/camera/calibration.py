@@ -108,18 +108,29 @@ def orient(x: float, y: float, rotation: int, mirror: bool) -> tuple[float, floa
 
 # ---- stored setup ----
 
+DEFAULT_FILE = Path(__file__).with_name("default_calibration.json")
+
+
 class CameraSetup:
-    """Clicks and the solved camera, stored as calibration.json in the data folder."""
+    """Clicks and the solved camera, stored as calibration.json in the data folder.
+
+    Every U1 has the same camera mount, so a default setup ships with Guardian (default_calibration.json). It is used until
+    the person saves their own, and comes back when they press Start over. UNVERIFIED: that every unit matches it."""
 
     def __init__(self, folder: Path) -> None:
         self.folder = folder
         self.path = folder / "calibration.json"
         self.data: dict[str, Any] = {}
-        if self.path.is_file():
-            try:
-                self.data = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                self.data = {}
+        self.using_default = False
+        for src, is_default in ((self.path, False), (DEFAULT_FILE, True)):
+            if src.is_file():
+                try:
+                    data = json.loads(src.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if data.get("P"):
+                    self.data, self.using_default = data, is_default
+                    break
 
     @property
     def ready(self) -> bool:
@@ -148,17 +159,20 @@ class CameraSetup:
         self.data.update({"clicks": clicks, "P": p, "rms_px": round(rms, 1),
                           "rotation": self.data.get("rotation", 0) if rotation is None else int(rotation) % 4,
                           "mirror": self.data.get("mirror", False) if mirror is None else bool(mirror)})
+        self.using_default = False
         self.save()
         return self.data
 
     def set_orientation(self, rotation: int, mirror: bool) -> None:
         self.data["rotation"], self.data["mirror"] = int(rotation) % 4, bool(mirror)
+        self.using_default = False
         self.save()
 
     def clear(self) -> None:
-        self.data = {}
+        """Drop the person's own setup. The shipped default (if any) takes over again."""
         if self.path.exists():
             self.path.unlink()
+        self.__init__(self.folder)
 
     def to_image(self, x: float, y: float, height: float, bed_z: float) -> tuple[float, float] | None:
         """Printer point (x, y) at `height` mm above the plate, with the bed at bed_z, to picture pixels."""
