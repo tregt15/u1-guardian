@@ -75,8 +75,8 @@ function drawCorners() {
 }
 
 function draw() {
-  const top = !!(info && info.bed_at_top);
-  lockNote.hidden = top;
+  const top = true;  // the pictures are saved files, so they can be clicked any time
+  lockNote.hidden = true;
   stage.style.cursor = top ? "crosshair" : "not-allowed";
   img.style.opacity = top ? "1" : ".55";
   stage.hidden = !frame;
@@ -108,7 +108,7 @@ function draw() {
 
 img.addEventListener("load", draw);
 stage.addEventListener("click", (ev) => {
-  if (!frame || !(info && info.bed_at_top)) return;  // locked until the bed is at the very top
+  if (!frame) return;
   const r = img.getBoundingClientRect();
   const u = (ev.clientX - r.left) / r.width * (img.naturalWidth || 1920);  // can be below 0 or past the width: a corner off the picture
   const v = (ev.clientY - r.top) / r.height * (img.naturalHeight || 1080);
@@ -165,10 +165,10 @@ function drawBed() {
   if (info && !info.bed_at_top) {
     const why = !info.moves_allowed ? "Moving the bed for the setup is turned off in Settings, Printer controls. You can also raise the bed from the printer screen."
       : ["printing", "paused"].includes(info.print_state) ? "A print is " + info.print_state + ". Finish it and clear the plate first."
-        : "The bed is not at the top yet.";
+        : "The bed is not at the top. Click the pictures below any time, or take new ones.";
     bedBox.replaceChildren(el("div", { class: "banner t-warn" }, ic("i-alert"), el("div", { class: "grow" },
-      el("div", { class: "b-title" }, "The plate is not in view."), el("div", { class: "b-text" }, why)),
-      info.moves_allowed && !["printing", "paused"].includes(info.print_state) ? el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: askMove }, "Try again") : null));
+      el("div", { class: "b-title" }, "Want new pictures?"), el("div", { class: "b-text" }, why)),
+      info.moves_allowed && !["printing", "paused"].includes(info.print_state) ? el("button", { type: "button", class: "btn btn-secondary btn-sm", onclick: askMove }, "Take new pictures") : null));
     return;
   }
   bedBox.replaceChildren();
@@ -202,7 +202,6 @@ async function load() {
   try { info = await api("/api/camera-setup"); } catch (e) { msg.textContent = "Could not load: " + e.message; return; }
   drawBed();
   if (info.move.running) pollMove();
-  else if (!info.bed_at_top && !asked && info.moves_allowed && !["printing", "paused"].includes(info.print_state)) { asked = true; askMove(); }
   clicks = {};
   for (const c of info.clicks || []) (clicks[c.frame] = clicks[c.frame] || {})[c.corner] = [c.u, c.v];
   drawFrames();
