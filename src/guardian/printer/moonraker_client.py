@@ -14,7 +14,7 @@ Two exceptions, both owner approved (2026-11-09), each behind its own switch:
   U1 it runs Klipper's PAUSE (read in pause_resume.py), which refuses when not printing or already
   paused. Verified on the real U1 (2026-11-10): it paused a print.
 - `printer.gcode.script` with exactly one of SETUP_SCRIPTS (allow_setup_moves): home, then raise the bed to
-  30 mm, 15 mm and 5 mm for the camera setup, only when idle and after the person confirmed the plate is empty.
+  30 mm, 7 mm and 5 mm for the camera setup, only when idle and after the person confirmed the plate is empty.
 - `printer.print.resume` and `printer.print.cancel` with no params (allow_controls). Only sent when a
   person clicks Resume or Stop on the dashboard and confirms (owner asked, 2026-11-10). Guardian
   itself never sends them.
@@ -53,7 +53,7 @@ CANCEL = "printer.print.cancel"
 GCODE = "printer.gcode.script"
 # The only G-code Guardian may ever send (owner approved, 2026-11-11): homing and two bed heights for the camera setup.
 # The U1 Z home is at the bottom (position_endstop 275), so homing lowers the bed. Z 5 is the lowest it goes.
-SETUP_SCRIPTS = frozenset({"G28", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z15 F600\nM400", "G90\nG1 Z5 F300\nM400"})
+SETUP_SCRIPTS = frozenset({"G28", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z7 F600\nM400", "G90\nG1 Z5 F300\nM400"})
 
 _ID_INFO, _ID_LIST, _ID_SUBSCRIBE = 1, 2, 3
 

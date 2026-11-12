@@ -121,7 +121,7 @@ the pictures Guardian already saves, about 1 to 2 a second, so watching adds no 
 
 Settings, Camera setup. Guardian needs to know where the camera looks to compare the camera with the print file.
 When you open the page, Guardian asks you to confirm the build plate is empty (type EMPTY), then homes the printer and
-raises the bed to the top, saving a picture at 30 mm, 15 mm and 5 mm. Click the 4 plate corners on both pictures and press
+raises the bed to the top, saving a picture at 30 mm, 7 mm and 5 mm. Click the 4 plate corners on the pictures and press
 Save. If the drawn parts do not sit on the real ones, press Turn or Mirror. This is the only time Guardian moves the
 printer. It never does it during a print, and you can turn it off in Settings, Printer controls.
 

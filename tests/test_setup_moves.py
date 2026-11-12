@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from guardian.bus import EventBus
-from guardian.camera.setup_moves import HOME, Z5, Z15, Z30, SetupMover
+from guardian.camera.setup_moves import HOME, Z5, Z7, Z30, SetupMover
 from guardian.clock import ManualClock, from_iso
 from guardian.mock_moonraker import MockMoonraker
 from guardian.printer.moonraker_client import MoonrakerClient
@@ -27,13 +27,13 @@ async def test_client_sends_only_the_three_setup_scripts_and_waits():
         async with asyncio.timeout(5):
             while not client.connected:
                 await asyncio.sleep(0.02)
-            for s in (HOME, Z30, Z15, Z5):
+            for s in (HOME, Z30, Z7, Z5):
                 await client.setup_move(s, timeout=3)
     finally:
         stop.set()
         await task
         await mock.stop()
-    assert mock.scripts_run == [HOME, Z30, Z15, Z5] and mock.refused == []
+    assert mock.scripts_run == [HOME, Z30, Z7, Z5] and mock.refused == []
 
 
 class Rig:
@@ -52,7 +52,7 @@ class Rig:
         self.moves.append(script)
         if script == self.fail_on:
             raise RuntimeError("The printer refused: Must home axis first")
-        self.z = {HOME: 275.0, Z30: 30.0, Z15: 15.0, Z5: 5.0}[script]
+        self.z = {HOME: 275.0, Z30: 30.0, Z7: 7.0, Z5: 5.0}[script]
 
     async def _picture(self):
         return b"\xff\xd8jpeg" if self.pictures else None
@@ -71,7 +71,7 @@ async def test_runs_the_steps_and_saves_two_pictures():
     r = Rig()
     r.m.start(plate_empty=True)
     await r.finish()
-    assert r.moves == [HOME, Z30, Z15, Z5] and r.saved == [("setup_30", 30.0), ("setup_15", 15.0), ("setup_05", 5.0)]
+    assert r.moves == [HOME, Z30, Z7, Z5] and r.saved == [("setup_30", 30.0), ("setup_07", 7.0), ("setup_05", 5.0)]
     assert r.m.status()["state"] == "done"
 
 

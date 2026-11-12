@@ -25,7 +25,7 @@ main.append(
       el("p", { class: "h-sub" }, "Show Guardian where the camera looks, so it can compare the camera with the print file.")))),
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-info"), el("h2", { class: "card-title" }, "How it works")),
     el("div", { class: "card-b" }, el("ol", { class: "numlist" },
-      el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves three pictures on the way up (bed at 30, 15 and 5 mm)."),
+      el("li", {}, "When you open this page, Guardian homes the printer and raises the bed to the top, after you confirm the plate is empty. It saves three pictures on the way up (bed at 30, 7 and 5 mm)."),
       el("li", {}, "Click the 4 corners of the black build plate, in this order: back left, back right, front right, front left. If a corner is hidden or off the picture, press \"Skip this corner\" instead of guessing. You need at least 6 clicks in all."),
       el("li", {}, "Do the same on a second picture with the bed at a different height (for example the start of a print and 30 mm later)."),
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
