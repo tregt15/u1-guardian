@@ -154,22 +154,39 @@ function drawTop(s) {
     nodes.push(el("section", { class: "card", "aria-labelledby": "cam-h" },
       el("div", { class: "card-h" }, ic("i-camera"), el("h2", { class: "card-title", id: "cam-h" }, "Live camera"),
         el("span", { class: "small muted right" }, c.last_frame_utc ? "Picture " + ago(c.last_frame_utc) : "No picture yet")),
-      el("div", { class: "card-b" }, camAndModel(s), el("p", { class: "cam-note" }, camNote(s)), expectedBox(s))));
+      el("div", { class: "card-b" }, camAndSim(s), el("p", { class: "cam-note" }, camNote(s)), expectedBox(s))));
   }
   parts.top.className = "dash-top" + (state === "paused" ? " solo" : "");
   parts.top.replaceChildren(...nodes);
 }
 
-// The camera next to a drawing of the print so far, seen through the camera fit. Only while a print runs.
-let model = null, modelAt = 0;
-function camAndModel(s) {
+// The camera next to a simulated picture of what it should see now (drawn by Guardian from the print file, through the
+// camera setup). This is the same picture the AI is given to compare with the camera. Only while a print runs.
+let simImg = null, simAt = 0, simNote = null, simBox = null;
+function camAndSim(s) {
   const pf = s.print_file || {}, p = s.printer || {};
-  if (!camWanted(s) || !pf.has_picture || !["printing", "paused"].includes(p.print_state)) return camBox(s);
-  if (!model) model = PrintModel.mount();
-  if (camImg && camImg.naturalWidth) model.setSize(camImg.naturalWidth, camImg.naturalHeight);
-  if (Date.now() - modelAt > 15000) { modelAt = Date.now(); model.refresh(s); } else model.repaint(s);
-  return el("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px" },
-    el("div", {}, camBox(s)), model.node);
+  if (!camWanted(s) || !pf.has_picture || !["printing", "paused"].includes(p.print_state)) { simBox = null; return camBox(s); }
+  if (!simBox) {
+    simImg = el("img", { class: "live", alt: "Simulated picture of what the camera should see" });
+    simNote = el("p", { class: "cam-note" });
+    simBox = el("div", {}, el("div", { class: "cam" }, simImg, el("span", { class: "cam-tag" }, el("span", { class: "dot" }), "Should see")), simNote);
+    simAt = 0;
+  }
+  if (Date.now() - simAt > 15000) {  // a new picture every 15 s, swapped in only when it has loaded
+    simAt = Date.now();
+    const next = new Image();
+    next.onload = () => { simImg.src = next.src; simNote.textContent = simText(s); };
+    next.onerror = () => { simNote.textContent = "No simulated picture yet. Set up the camera first (Settings, Camera setup)."; };
+    next.src = "/api/print/simulated.png?t=" + simAt + tokenQuery("&");
+  }
+  if (!simNote.textContent) simNote.textContent = "Drawing the simulated picture...";
+  return el("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px" }, el("div", {}, camBox(s)), simBox);
+}
+function simText(s) {
+  const p = s.printer || {}, pf = s.print_file || {};
+  return "Simulation from the print file" + (p.print_progress != null ? ", " + Math.round(p.print_progress) + "% done" : "") +
+    (pf.max_z_mm ? ", " + pf.max_z_mm + " mm tall so far" : "") + ". It is drawn from the camera's point of view, so it should look like the live picture. " +
+    "It has no toolheads, shadows or lens bending, so small edge differences are normal.";
 }
 
 // The plate as the print file says it should look now (drawn from the G-code, seen from above).

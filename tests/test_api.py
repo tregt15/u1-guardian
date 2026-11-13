@@ -346,10 +346,10 @@ def test_expected_drawing_endpoint(tmp_path):
     assert r.status_code == 200 and r.headers["content-type"] == "image/png" and r.content.startswith(b"\x89PNG")
 
 
-def test_print_model_endpoint(tmp_path):
+def test_simulated_picture_endpoint(tmp_path):
     env = make_env(tmp_path)
-    assert env.client.get("/api/print/model").json() == {"ready": False, "cells": []}
-    env.ctx.extra["print_model"] = lambda: {"ready": True, "cells": [[1, 2, 3.0, 0]]}
+    assert env.client.get("/api/print/simulated.png").status_code == 404
+    env.ctx.extra["simulated_picture"] = lambda: b"PNG fake"
     env.client = TestClient(create_app(env.ctx))
-    r = env.client.get("/api/print/model")
-    assert r.status_code == 200 and r.json()["cells"] == [[1, 2, 3.0, 0]]
+    r = env.client.get("/api/print/simulated.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"

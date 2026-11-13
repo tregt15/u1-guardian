@@ -177,13 +177,31 @@ def _hint(key: str) -> str | None:
 ReportFn = Callable[..., Awaitable[Any]]
 
 
+# Compare check (added 2026-11-13). The AI gets the camera picture and a simulated picture made from the print file through
+# the camera setup (camera/simulate.py), and says what is different. WATCH ONLY: the answer is kept for review and shown on
+# the dashboard. It does not raise an incident or pause a print. (A 7B model said "fine" on the top down drawing even with
+# 7 of 8 parts missing, so how well this works on the real U1 is UNVERIFIED.)
+COMPARE_PROMPT = ("Picture 1 is a real photo from the camera inside a 3D printer. Picture 2 is a computer drawing of what the same "
+                  "camera should see right now, made from the print file. It is from the same viewpoint. The drawing has plain "
+                  "colors, no shadows and no toolheads, and its edges can be a little off.\n"
+                  "Compare them on the build plate only. List what is different: a part that is in the drawing but missing or "
+                  "fallen in the photo, plastic in the photo where the drawing is empty (loose strands, a lump, a part that moved), "
+                  "or a part that is a very different size or shape. Ignore the toolheads, docks, purge bin, small color or edge "
+                  "differences and lighting.\n"
+                  'JSON: {"description": "one sentence on what you see in each", "matches": true or false, '
+                  '"differences": ["each real difference"], "kind": "missing_part, extra_plastic, moved or none", '
+                  '"confidence": a number from 0 to 1}')
+
+
 class VisionWatcher:
     def __init__(self, ai: AiService, clock: Clock, *, print_state: Callable[[], str | None],
                  get_frame: Callable[[], Awaitable[bytes | None]], report: ReportFn,
                  save_evidence: Callable[[Any, list[bytes]], Any] | None = None,
                  action_code: Callable[[], Any] = lambda: None,
                  context: Callable[[], dict] = lambda: {},
-                 failure_severity: Callable[[], str] = lambda: "critical") -> None:
+                 failure_severity: Callable[[], str] = lambda: "critical",
+                 get_simulated: Callable[[], Awaitable[bytes | None]] | None = None) -> None:
+        self._get_simulated = get_simulated
         self.ai = ai
         self.cfg = ai.cfg
         self.clock = clock
@@ -295,6 +313,7 @@ class VisionWatcher:
             self._remember("print", None, "skipped: no fresh camera picture")
             return
         a = await self._ask("print", frame)
+        await self._compare(frame)
         if a is None:
             return
         bad = (_bool(a.get("plate_visible")) is not False and _bool(a.get("failure")) is True
@@ -319,6 +338,30 @@ class VisionWatcher:
         await self._fire("ai_print_failure", f"The AI saw a print failure ({kinds}) {PRINT_CONFIRMATIONS} times in a row: "
                          f"{a.get('description')}", [f for f, _ in streak], streak[0][1], a,
                          severity=self._failure_severity())
+
+    async def _compare(self, frame: bytes) -> None:
+        """Ask the AI to compare the camera picture with the simulated one. Only recorded, never an alert."""
+        if self._get_simulated is None:
+            return
+        try:
+            sim = await self._get_simulated()
+        except Exception:  # noqa: BLE001
+            log.exception("could not make the simulated picture")
+            return
+        if not sim:
+            return
+        try:
+            self.checks_run += 1
+            a = await self.ai.ask(COMPARE_PROMPT, [frame, sim])
+        except OllamaError as exc:
+            self._remember("compare", None, f"AI error: {exc}")
+            return
+        if _bool(a.get("matches")) is False and _conf(a.get("confidence")) >= self.cfg.min_confidence:
+            diff = a.get("differences")
+            what = ", ".join(str(d) for d in diff[:3]) if isinstance(diff, list) and diff else str(a.get("kind") or "unknown")
+            self._remember("compare", a, f"differs from the print file: {what} (watch only, no alert)")
+        else:
+            self._remember("compare", a, "matches the print file" if _bool(a.get("matches")) else "no clear difference")
 
     async def _warm(self) -> None:
         try:

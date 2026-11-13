@@ -332,3 +332,31 @@ def test_known_meanings_and_tidy():
     assert known_notes("everything fine") == []
     a = tidy({"evidence": ["x", "X ", "y"], "what_to_check": ["a", "a"]})
     assert a["evidence"] == ["x", "y"] and a["what_to_check"] == ["a"]
+
+
+async def test_compare_sends_both_pictures_and_only_records(monkeypatch):
+    answer = {"matches": False, "differences": ["part 3 is missing"], "kind": "missing_part", "confidence": 0.9}
+    rig = Rig([answer], monkeypatch)
+
+    async def sim():
+        return b"\x89PNG simulated"
+
+    rig.w._get_simulated = sim
+    await rig.w._compare(JPEG)
+    assert len(rig.fake.chats[0]["messages"][-1]["images"]) == 2  # the photo and the simulated picture
+    assert rig.reports == []  # watch only: no incident, so no pause
+    rec = rig.w.status()["recent"][0]
+    assert rec["check"] == "compare" and "part 3 is missing" in rec["verdict"] and "no alert" in rec["verdict"]
+
+
+async def test_compare_is_skipped_without_a_simulated_picture(monkeypatch):
+    rig = Rig([{"matches": True, "confidence": 0.9}], monkeypatch)
+    await rig.w._compare(JPEG)  # no provider at all
+    assert rig.fake.chats == []
+
+    async def none():
+        return None
+
+    rig.w._get_simulated = none  # camera not set up
+    await rig.w._compare(JPEG)
+    assert rig.fake.chats == [] and rig.w.status()["recent"] == []

@@ -54,6 +54,19 @@ class PlateMap:
         if z > self.max_z:
             self.max_z = z
 
+    def blocks(self, cell: int = 3) -> list[tuple[int, int, float, int]]:
+        """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out."""
+        best: dict[tuple[int, int], tuple[int, int]] = {}
+        for cy in range(N):
+            row = cy * N
+            for cx in range(N):
+                h = self.height[row + cx]
+                if h:
+                    key = (cx // cell, cy // cell)
+                    if key not in best or h > best[key][0]:
+                        best[key] = (h, self.tool[row + cx])
+        return [(cx, cy, round(h / 10, 1), t) for (cx, cy), (h, t) in best.items()]
+
     def covered_cells(self) -> int:
         return sum(1 for h in self.height if h)
 
@@ -194,8 +207,8 @@ def draw_top(plate: PlateMap, colors: list[str], size: int = 540) -> bytes:
     return png(size, size, rgb)
 
 
-# Tested 2026-11-11 with qwen2.5vl:7b: given this drawing next to a photo that showed only 1 of 8 parts, the model
-# still said "fine". So the drawing is NOT given to the AI. It is shown to people, and kept for a measured comparison
+# Tested 2026-11-11 with qwen2.5vl:7b: given this top down drawing next to a photo that showed only 1 of 8 parts, the model
+# still said "fine". So this drawing is NOT given to the AI. The AI compare check uses camera/simulate.py instead (watch only). It is shown to people, and kept for a measured comparison
 # once the camera is set up (4 plate corners).
 EXPECTED_HINT = ("The SECOND picture is not a photo. It is a drawing Guardian made from the print file. It shows the build "
                  "plate seen from straight above, with the printed plastic where it should be right now (brighter means "
