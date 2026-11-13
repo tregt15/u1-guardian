@@ -161,6 +161,7 @@ class App:
                                                 "set_ai_key": self.set_ai_key,
                                                 "cancel_autopause": self.autopause.cancel,
                                                 "expected_picture": self.expected_picture,
+                                                "print_model": self.print_model,
                                                 "app": self}))
         self.bus.subscribe("trigger.manual", self._on_manual)
         self.bus.subscribe("printer.connected", self._log_event)
@@ -362,6 +363,30 @@ class App:
             return None
         colors = self._file_meta.get("hex") or []
         return draw_top(self.gcode.plate, colors)
+
+    def print_model(self) -> dict:
+        """The printed plastic so far as 3 mm blocks, plus the camera fit, so the dashboard can draw the print as the
+        camera should see it. Read only. Heights are mm above the plate."""
+        name = self.tracker.status.get("print_stats", {}).get("filename")
+        plate = self.gcode.plate
+        cell, n = 3, 90  # 3 mm blocks over the 270 mm plate
+        blocks: dict[int, tuple[int, int]] = {}
+        if name and self.gcode.filename == name and plate.max_z:
+            from guardian.ai.gcode_view import N as CELLS
+            for cy in range(CELLS):
+                row = cy * CELLS
+                for cx in range(CELLS):
+                    h = plate.height[row + cx]
+                    if h:
+                        k = (cy // cell) * n + (cx // cell)
+                        if k not in blocks or h > blocks[k][0]:
+                            blocks[k] = (h, plate.tool[row + cx])
+        cs = self.camera_setup
+        return {"ready": cs.ready, "rms_px": cs.data.get("rms_px"), "P": cs.data.get("P"),
+                "rotation": cs.data.get("rotation", 0), "mirror": cs.data.get("mirror", False),
+                "cell_mm": cell, "bed_z": self._bed_z(), "max_z": round(plate.max_z, 2) if blocks else 0.0,
+                "colors": self._file_meta.get("hex") or [] if self._file_meta.get("filename") == name else [],
+                "cells": [[k % n, k // n, round(h / 10, 1), t] for k, (h, t) in blocks.items()]}
 
     async def _refresh_file_meta(self) -> None:
         """Read the print file's info (height, layers, colors) once per print. Read only."""

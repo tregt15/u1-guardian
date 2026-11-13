@@ -107,5 +107,5 @@ const Plate3D = (() => {
     return { card, update(i) { info = i; draw(); } };
   }
 
-  return { mount };
+  return { mount, cameraCentre };
 })();

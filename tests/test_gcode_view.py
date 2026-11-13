@@ -74,3 +74,21 @@ def test_drawing_is_a_valid_png():
     assert (w, h) == (90, 90)
     idat = data[data.index(b"IDAT") + 4:data.index(b"IEND") - 8]
     assert len(zlib.decompress(idat)) == 90 * (1 + 90 * 3)
+
+
+def test_print_model_blocks_the_plate_into_3mm_cells():
+    from types import SimpleNamespace
+
+    from guardian.ai.gcode_view import PlateMap
+    from guardian.main import App
+
+    plate = PlateMap()
+    plate.mark(10, 10, 12, 10, 4.2, 1)  # cells 10 to 12 on one row, 4.2 mm tall, tool 1
+    plate.mark(10, 10, 10, 10, 8.0, 0)  # a taller spot in the same 3 mm block
+    fake = SimpleNamespace(
+        tracker=SimpleNamespace(status={"print_stats": {"filename": "a.gcode"}, "toolhead": {"position": [0, 0, 8.0]}}),
+        gcode=SimpleNamespace(filename="a.gcode", plate=plate), _file_meta={"filename": "a.gcode", "hex": ["#ff0000"]},
+        camera_setup=SimpleNamespace(ready=False, data={}), _bed_z=lambda: 8.0)
+    m = App.print_model(fake)
+    assert m["cell_mm"] == 3 and m["bed_z"] == 8.0 and m["max_z"] == 8.0 and m["colors"] == ["#ff0000"]
+    assert m["cells"] == [[3, 3, 8.0, 0], [4, 3, 4.2, 1]]  # the tallest cell of a block wins; x 12 is the next block

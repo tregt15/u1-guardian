@@ -154,10 +154,22 @@ function drawTop(s) {
     nodes.push(el("section", { class: "card", "aria-labelledby": "cam-h" },
       el("div", { class: "card-h" }, ic("i-camera"), el("h2", { class: "card-title", id: "cam-h" }, "Live camera"),
         el("span", { class: "small muted right" }, c.last_frame_utc ? "Picture " + ago(c.last_frame_utc) : "No picture yet")),
-      el("div", { class: "card-b" }, camBox(s), el("p", { class: "cam-note" }, camNote(s)), expectedBox(s))));
+      el("div", { class: "card-b" }, camAndModel(s), el("p", { class: "cam-note" }, camNote(s)), expectedBox(s))));
   }
   parts.top.className = "dash-top" + (state === "paused" ? " solo" : "");
   parts.top.replaceChildren(...nodes);
+}
+
+// The camera next to a drawing of the print so far, seen through the camera fit. Only while a print runs.
+let model = null, modelAt = 0;
+function camAndModel(s) {
+  const pf = s.print_file || {}, p = s.printer || {};
+  if (!camWanted(s) || !pf.has_picture || !["printing", "paused"].includes(p.print_state)) return camBox(s);
+  if (!model) model = PrintModel.mount();
+  if (camImg && camImg.naturalWidth) model.setSize(camImg.naturalWidth, camImg.naturalHeight);
+  if (Date.now() - modelAt > 15000) { modelAt = Date.now(); model.refresh(s); } else model.repaint(s);
+  return el("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px" },
+    el("div", {}, camBox(s)), model.node);
 }
 
 // The plate as the print file says it should look now (drawn from the G-code, seen from above).

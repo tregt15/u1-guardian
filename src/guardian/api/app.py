@@ -513,6 +513,13 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(404, "no drawing from the print file right now")
         return Response(content=data, media_type="image/png", headers={"Cache-Control": "no-store"})
 
+    @app.get("/api/print/model", dependencies=[Depends(auth)])
+    async def print_model_get() -> Response:
+        """The print so far as 3 mm blocks and the camera fit, for the side by side 3D view on the dashboard."""
+        fn = ctx.extra.get("print_model")
+        data = await asyncio.to_thread(fn) if fn else {"ready": False, "cells": []}
+        return Response(content=json.dumps(data), media_type="application/json", headers={"Cache-Control": "no-store"})
+
     @app.get("/api/camera/latest", dependencies=[Depends(auth)])
     async def camera_latest():
         fn = ctx.extra.get("fresh_frame")
