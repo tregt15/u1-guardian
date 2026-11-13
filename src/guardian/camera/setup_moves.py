@@ -2,9 +2,12 @@
 
 This is the only time Guardian moves the printer. Steps, each waiting until the printer says it is done:
 1. Home all axes (G28). On the U1 the Z home is at the bottom (position_endstop 275), so the bed goes down.
-2. Raise the bed to Z 30 and save a camera picture.
-3. Raise the bed to Z 7 and save a second picture.
-4. Raise the bed to Z 5 (the top used for the setup) and save a third picture.
+2. Park the toolhead at the back middle (X 135, Y 250) so it does not cover the back corners in the pictures. The bed
+   is at its lowest here, so nothing can hit it. Added 2026-11-13, owner said the back middle is the safest spot.
+   UNVERIFIED: that Y 250 is the back and inside the U1's travel. If not, the printer refuses and Guardian stops.
+3. Raise the bed to Z 30 and save a camera picture.
+4. Raise the bed to Z 7 and save a second picture.
+5. Raise the bed to Z 5 (the top used for the setup) and save a third picture.
 
 Safety rules (a print left on the plate would hit the toolhead when the bed goes up):
 - Only when no print is running or paused, and the printer is connected.
@@ -24,7 +27,7 @@ from guardian.clock import Clock, to_iso
 
 log = logging.getLogger(__name__)
 
-HOME, Z30, Z7, Z5 = "G28", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z7 F600\nM400", "G90\nG1 Z5 F300\nM400"
+HOME, PARK, Z30, Z7, Z5 = "G28", "G90\nG1 X135 Y250 F6000\nM400", "G90\nG1 Z30 F600\nM400", "G90\nG1 Z7 F600\nM400", "G90\nG1 Z5 F300\nM400"
 TOP_Z = 6.0  # the bed counts as "at the top" at or below this Z (after homing)
 
 
@@ -81,6 +84,7 @@ class SetupMover:
     async def _run(self) -> None:
         try:
             await self._do("homing the printer", HOME)
+            await self._do("moving the toolhead to the back middle", PARK)
             await self._do("raising the bed to 30 mm", Z30)
             await self._shoot("setup_30")
             await self._do("raising the bed to 7 mm", Z7)
