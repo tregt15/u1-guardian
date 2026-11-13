@@ -424,7 +424,7 @@ def create_app(ctx: ApiContext) -> FastAPI:
         st = a.tracker.status
         return {"ready": a.camera_setup.ready, "rms_px": a.camera_setup.data.get("rms_px"),
                 "rotation": a.camera_setup.data.get("rotation", 0), "mirror": a.camera_setup.data.get("mirror", False),
-                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames, "using_default": a.camera_setup.using_default,
+                "clicks": a.camera_setup.data.get("clicks", []), "P": a.camera_setup.data.get("P"), "frames": frames, "using_default": a.camera_setup.using_default,
                 "bed_z_now": a._bed_z(), "homed": st.get("toolhead", {}).get("homed_axes", ""),
                 "print_state": a.tracker.print_state, "bed_at_top": a.bed_at_top(), "move": a.setup_mover.status(),
                 "moves_allowed": a.cfg.controls.setup_moves, "last_print": a.last_print()}

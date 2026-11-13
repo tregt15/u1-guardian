@@ -5,6 +5,7 @@ const main = Shell.start("settings");
 const CORNER_NAMES = ["1. Back left", "2. Back right", "3. Front right", "4. Front left"];
 let info = null, frame = null, corner = 0, clicks = {}, overlay = [];
 
+const plate3d = Plate3D.mount(null);
 const frameList = el("div", { class: "thumbs" });
 // The picture sits in a dark border (12.5% of the width each side) so a corner just off the picture can still be clicked.
 // In picture pixels the border is 1/6 of the picture width.
@@ -33,6 +34,7 @@ main.append(
       el("li", {}, "Press Save. Guardian draws the plate and the printed parts on the picture. If the parts are not on the drawing, press Turn or Mirror until they are.")),
       el("p", { class: "small muted", style: "margin-top:8px" }, "Guardian only moves the bed here, only when no print is running, and only after you confirm the plate is empty."))),
   bedBox,
+  plate3d.card,
   el("section", { class: "card" }, el("div", { class: "card-h" }, ic("i-camera"), el("h2", { class: "card-title" }, "Pictures"),
     el("button", { type: "button", class: "btn btn-secondary btn-sm right", onclick: saveLive }, ic("i-camera", "sm"), "Use the live picture now")),
     el("div", { class: "card-b" }, frameList, msg)),
@@ -139,6 +141,7 @@ function drawFrames() {
 }
 
 function drawFit() {
+  plate3d.update(info);
   if (!info || !info.ready) { fitBox.replaceChildren(el("p", { class: "small muted", style: "margin-top:10px" }, "Not set up yet.")); return; }
   const good = info.rms_px != null && info.rms_px < 15;
   fitBox.replaceChildren(el("div", { class: "banner " + (good ? "t-ok" : "t-warn"), style: "margin-top:12px" }, ic(good ? "i-check" : "i-alert"),
