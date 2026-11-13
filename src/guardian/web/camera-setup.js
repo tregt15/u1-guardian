@@ -14,6 +14,17 @@ const svg = el("svg", { style: "position:absolute;inset:0;width:100%;height:100%
 stage.append(img, svg);
 const cornerBtns = el("div", { class: "seg", role: "radiogroup", "aria-label": "Which corner" });
 const fitBox = el("div");
+// Lens bend: the U1 camera is wide angle. Moving this bends the yellow plate and the simulated picture the same way.
+const lensVal = el("span", { class: "small muted" }, "");
+const lensIn = el("input", { type: "range", min: "0", max: "1", step: "0.05", value: "0.2", "aria-label": "Lens bend", style: "flex:1;min-width:140px" });
+lensIn.addEventListener("input", () => { lensVal.textContent = Number(lensIn.value).toFixed(2); });
+lensIn.addEventListener("change", async () => {
+  try { info = await api("/api/camera-setup", { method: "PUT", body: JSON.stringify({ lens: Number(lensIn.value) }) }); }
+  catch (e) { toast("Not changed: " + e.message, "t-crit"); return; }
+  drawFit(); if (frame) pick(frame);
+});
+const lensRow = el("div", { class: "row", style: "margin-top:12px;gap:10px;align-items:center" }, el("span", { class: "small" }, "Lens bend"), lensIn, lensVal,
+  el("span", { class: "small muted" }, "Makes straight edges curve like the wide angle camera. Raise it until the yellow plate edges follow the real edges."));
 const noFrame = el("p", { class: "small muted" }, "Pick a picture above first. Then click the corners on it here.");
 const bedBox = el("div");
 const lockNote = el("div", { class: "banner t-info", style: "margin-bottom:12px" }, ic("i-lock"),
@@ -45,7 +56,7 @@ main.append(
       el("button", { type: "button", class: "btn btn-secondary", onclick: skipCorner }, "Skip this corner (can't see it)"),
       el("button", { type: "button", class: "btn btn-secondary", onclick: () => { if (frame) { delete clicks[frame]; draw(); } } }, "Clear this picture"),
       el("button", { type: "button", class: "btn btn-danger-quiet", onclick: reset }, ic("i-trash", "sm"), "Start over")),
-      fitBox)));
+      lensRow, fitBox)));
 
 // A corner that is hidden by the toolhead or off the picture is better left out than guessed. The fit needs only
 // 6 clicks in all, from 2 different bed heights.
@@ -139,6 +150,7 @@ function drawFrames() {
 }
 
 function drawFit() {
+  if (info && info.lens != null) { lensIn.value = String(info.lens); lensVal.textContent = Number(info.lens).toFixed(2); }
   if (!info || !info.ready) { fitBox.replaceChildren(el("p", { class: "small muted", style: "margin-top:10px" }, "Not set up yet.")); return; }
   const good = info.rms_px != null && info.rms_px < 15;
   fitBox.replaceChildren(el("div", { class: "banner " + (good ? "t-ok" : "t-warn"), style: "margin-top:12px" }, ic(good ? "i-check" : "i-alert"),

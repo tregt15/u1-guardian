@@ -4,8 +4,10 @@ The print so far (the plate height map read from the G-code up to where the prin
 through the camera fit from Camera setup (camera/calibration.py). The picture has the same viewpoint as the real camera,
 so a person can put it next to the live picture, and the AI can be given both and asked what is different.
 
-It is a simulation, not a photo: plain colors, no shadows, no toolheads, no lens bending (the fit ignores it, so edges can
-be off by some pixels, see the fit error). UNVERIFIED: how well it lines up with the real picture on the real U1.
+It is a simulation, not a photo: plain colors, no shadows, no toolheads. It bends straight lines like the wide angle lens
+does (one number, "Lens bend" on the Camera setup page). The enclosure walls are drawn as plain dark panels at a guessed
+distance from the plate (WALL_MARGIN, WALL_TOP below), only to give the plate some surroundings. UNVERIFIED: the wall
+distances, and how well it lines up with the real picture on the real U1.
 
 Pure Python (standard library only), so it also runs on a Raspberry Pi. 960 x 540 draws in well under a second.
 """
@@ -15,13 +17,18 @@ from __future__ import annotations
 import math
 
 from guardian.ai.gcode_view import hex_rgb, png
-from guardian.camera.calibration import PLATE_MM, CameraSetup, orient
+from guardian.camera.calibration import PLATE_MM, CameraSetup, distort, orient
 
 W, H = 960, 540
 SRC_W = 1920  # the clicks in the camera setup are in full size (1920 wide) picture pixels
 BACKGROUND = (28, 30, 36)
 PLATE = (46, 49, 56)
 EDGE = (120, 108, 70)
+WALL = (36, 39, 47)
+WALL_LINE = (52, 56, 66)
+WALL_MARGIN = 15.0  # mm from the plate edge to the wall. UNVERIFIED guess.
+WALL_TOP = 300.0  # mm above the plate top when the bed is at the top. UNVERIFIED guess.
+SEGMENTS = 24  # long edges are cut in pieces so they can bend with the lens
 
 
 def camera_centre(p: list[list[float]]) -> tuple[float, float, float] | None:
@@ -44,7 +51,7 @@ def camera_centre(p: list[list[float]]) -> tuple[float, float, float] | None:
 
 
 def _fill(rgb: bytearray, pts: list[tuple[float, float]], color: tuple[int, int, int]) -> None:
-    """Fill a convex polygon (scanline). Points are (x, y) in W x H pixels."""
+    """Fill a polygon (scanline, even odd rule). Points are (x, y) in W x H pixels."""
     y0, y1 = max(0, int(math.floor(min(p[1] for p in pts)))), min(H - 1, int(math.ceil(max(p[1] for p in pts))))
     n = len(pts)
     px = bytes(color)
@@ -56,11 +63,11 @@ def _fill(rgb: bytearray, pts: list[tuple[float, float]], color: tuple[int, int,
             bx, by = pts[(i + 1) % n]
             if (ay <= yc < by) or (by <= yc < ay):
                 xs.append(ax + (yc - ay) / (by - ay) * (bx - ax))
-        if len(xs) < 2:
-            continue
-        a, b = max(0, int(math.floor(min(xs) - 0.5))), min(W - 1, int(math.ceil(max(xs) - 0.5)))
-        if b >= a:
-            rgb[(y * W + a) * 3:(y * W + b + 1) * 3] = px * (b - a + 1)
+        xs.sort()
+        for i in range(0, len(xs) - 1, 2):
+            a, b = max(0, int(math.floor(xs[i] - 0.5))), min(W - 1, int(math.ceil(xs[i + 1] - 0.5)))
+            if b >= a:
+                rgb[(y * W + a) * 3:(y * W + b + 1) * 3] = px * (b - a + 1)
 
 
 def _line(rgb: bytearray, a: tuple[float, float], b: tuple[float, float], color: tuple[int, int, int]) -> None:
@@ -87,20 +94,53 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
     if cam is None:
         return None
     k = W / SRC_W
+    k1 = setup.lens
 
     def to_px(ox: float, oy: float, z: float) -> tuple[float, float] | None:
         w = p[2][0] * ox + p[2][1] * oy + p[2][2] * z + p[2][3]
-        if abs(w) < 1e-9:
+        if w <= 1e-9:  # at or behind the camera
             return None
-        return (k * (p[0][0] * ox + p[0][1] * oy + p[0][2] * z + p[0][3]) / w,
-                k * (p[1][0] * ox + p[1][1] * oy + p[1][2] * z + p[1][3]) / w)
+        u, v = distort((p[0][0] * ox + p[0][1] * oy + p[0][2] * z + p[0][3]) / w,
+                       (p[1][0] * ox + p[1][1] * oy + p[1][2] * z + p[1][3]) / w, k1)
+        return k * u, k * v
+
+    def ring(corners: list[tuple[float, float, float]]) -> list[tuple[float, float]] | None:
+        """A closed outline with every edge cut in pieces, so the lens bends it. Points are plate frame (x, y, z)."""
+        out = []
+        for i, a in enumerate(corners):
+            b = corners[(i + 1) % len(corners)]
+            for j in range(SEGMENTS):
+                f = j / SEGMENTS
+                q = to_px(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
+                if q is None:
+                    return None
+                out.append(q)
+        return out
 
     rgb = bytearray(bytes(BACKGROUND) * (W * H))
-    plate = [to_px(*orient(x, y, rot, mirror), -bed_z) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))]
-    if all(plate):
-        _fill(rgb, plate, PLATE)  # type: ignore[arg-type]
-        for i in range(4):
-            _line(rgb, plate[i], plate[(i + 1) % 4], EDGE)  # type: ignore[arg-type]
+    # Walls on the far sides of the plate (the sides the camera is not on): plain dark panels with a line every 50 mm.
+    # They are in the plate frame the camera was set up in (the clicked corner frame), so they are not turned or mirrored.
+    mid, m, z0 = PLATE_MM / 2, WALL_MARGIN, -bed_z - 15.0
+    lo, hi = -m, PLATE_MM + m
+    for axis, at in ((0, -m), (0, PLATE_MM + m), (1, -m), (1, PLATE_MM + m)):
+        if (cam[axis] - at) * (mid - at) <= 0:
+            continue  # the camera is outside this wall, so it is a near wall and would hide the plate
+        def at_pt(t: float, z: float, axis: int = axis, at: float = at) -> tuple[float, float, float]:
+            return (at, t, z) if axis == 0 else (t, at, z)
+        outline = ring([at_pt(lo, z0), at_pt(hi, z0), at_pt(hi, WALL_TOP), at_pt(lo, WALL_TOP)])
+        if not outline:
+            continue
+        _fill(rgb, outline, WALL)
+        for z in range(int(z0) + 50, int(WALL_TOP), 50):
+            row = [to_px(*at_pt(t, z)) for t in range(int(lo), int(hi) + 1, 15)]
+            for a, b in zip(row, row[1:]):
+                if a and b:
+                    _line(rgb, a, b, WALL_LINE)
+    plate = ring([(*orient(x, y, rot, mirror), -bed_z) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))])
+    if plate:
+        _fill(rgb, plate, PLATE)
+        for i in range(len(plate)):
+            _line(rgb, plate[i], plate[(i + 1) % len(plate)], EDGE)
     tools = [hex_rgb(c) for c in colors] or [(230, 230, 230)]
     grid = {(cx, cy): h for cx, cy, h, _ in blocks}
     top = max(1.0, max_z or max((b[2] for b in blocks), default=1.0))

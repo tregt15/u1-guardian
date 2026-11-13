@@ -17,7 +17,7 @@ def setup_for(tmp_path):
         for i, (x, y) in enumerate(CORNERS):
             u, v = project(P_TRUE, x, y, -bed_z)
             clicks.append({"frame": frame, "bed_z": bed_z, "corner": i, "u": u, "v": v})
-    s.set_clicks(clicks)
+    s.set_clicks(clicks, lens=0)  # no lens bend, so project() below is exact
     return s
 
 
@@ -73,3 +73,14 @@ def test_plate_map_blocks_keep_the_tallest_cell_and_its_tool():
     plate.mark(10, 10, 12, 10, 4.2, 1)
     plate.mark(10, 10, 10, 10, 8.0, 0)
     assert sorted(plate.blocks()) == [(3, 3, 8.0, 0), (4, 3, 4.2, 1)]
+
+
+def test_the_lens_bend_moves_the_picture_and_walls_are_drawn(tmp_path):
+    s = setup_for(tmp_path)
+    flat = simulate.render(s, [], 5.0, [])
+    s.set_lens(0.4)
+    bent = simulate.render(s, [], 5.0, [])
+    assert flat != bent
+    rows = pixels(bent)
+    colors = {px(rows, x, y) for x in range(0, simulate.W, 8) for y in range(0, simulate.H, 8)}
+    assert simulate.WALL in colors and simulate.PLATE in colors  # a wall panel behind the plate

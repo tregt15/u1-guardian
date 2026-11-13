@@ -106,6 +106,43 @@ def orient(x: float, y: float, rotation: int, mirror: bool) -> tuple[float, floa
     return x, y
 
 
+# ---- lens bend ----
+# The U1 camera is wide angle, so straight edges are curved in the picture. A one number model (barrel bend, k1) is used:
+# a clicked (bent) point is moved to where a perfect pinhole camera would see it before the camera matrix is solved, and
+# the matrix result is bent the same way before it is drawn. The picture centre is taken as the middle of a 1920 x 1080
+# picture (UNVERIFIED). k1 = 0 means no bend. Clicks alone cannot pin k1 down (tested on real clicks: the fit barely
+# changes), so it is a setting on the Camera setup page that the person tunes by eye.
+IMG_CX, IMG_CY, IMG_NORM = 960.0, 540.0, 1000.0
+DEFAULT_LENS = 0.2
+LENS_RANGE = (0.0, 1.0)
+
+
+def undistort(u: float, v: float, k1: float) -> tuple[float, float]:
+    """A point as clicked on the (bent) picture to where a pinhole camera would put it."""
+    x, y = (u - IMG_CX) / IMG_NORM, (v - IMG_CY) / IMG_NORM
+    f = 1 + k1 * (x * x + y * y)
+    return IMG_CX + x * f * IMG_NORM, IMG_CY + y * f * IMG_NORM
+
+
+def distort(u: float, v: float, k1: float) -> tuple[float, float]:
+    """The opposite: a pinhole point to where the bent camera shows it (Newton steps on the radius)."""
+    x, y = (u - IMG_CX) / IMG_NORM, (v - IMG_CY) / IMG_NORM
+    ru = math.hypot(x, y)
+    if ru == 0 or k1 == 0:
+        return u, v
+    r = ru
+    for _ in range(30):
+        df = 1 + 3 * k1 * r * r
+        if abs(df) < 1e-9:
+            break
+        step = (r * (1 + k1 * r * r) - ru) / df
+        r -= step
+        if abs(step) < 1e-9:
+            break
+    s = r / ru
+    return IMG_CX + x * s * IMG_NORM, IMG_CY + y * s * IMG_NORM
+
+
 # ---- stored setup ----
 
 DEFAULT_FILE = Path(__file__).with_name("default_calibration.json")
@@ -142,21 +179,33 @@ class CameraSetup:
         tmp.write_text(json.dumps(self.data, indent=1), encoding="utf-8")
         os.replace(tmp, self.path)
 
-    def set_clicks(self, clicks: list[dict], rotation: int | None = None, mirror: bool | None = None) -> dict:
+    @property
+    def lens(self) -> float:
+        return float(self.data.get("k1", 0.0))
+
+    def set_clicks(self, clicks: list[dict], rotation: int | None = None, mirror: bool | None = None,
+                   lens: float | None = None) -> dict:
         """clicks: [{frame, bed_z, corner (0 to 3), u, v}]. Solves the camera. Raises CalibrationError."""
-        pts = []
+        if lens is None:
+            lens = self.lens if self.ready else DEFAULT_LENS
+        k1 = max(LENS_RANGE[0], min(LENS_RANGE[1], float(lens)))
+        pts, clicked = [], []
         for c in clicks:
             cx, cy = CORNERS[int(c["corner"]) % 4]
-            pts.append((float(c["u"]), float(c["v"]), cx, cy, -float(c["bed_z"])))
+            u, v = float(c["u"]), float(c["v"])
+            clicked.append((u, v))
+            uu, vv = undistort(u, v, k1)
+            pts.append((uu, vv, cx, cy, -float(c["bed_z"])))
         p = solve_camera(pts)
         errs = []
-        for u, v, x, y, z in pts:
+        for (u, v), (_, _, x, y, z) in zip(clicked, pts):
             q = project(p, x, y, z)
+            q = distort(q[0], q[1], k1) if q else None
             errs.append(math.hypot(q[0] - u, q[1] - v) if q else 1e9)
         rms = math.sqrt(sum(e * e for e in errs) / len(errs))
         # Per click error, so the page can mark the click that fits worst (often a guessed or off-screen corner).
         clicks = [dict(c, err_px=round(e, 1)) for c, e in zip(clicks, errs)]
-        self.data.update({"clicks": clicks, "P": p, "rms_px": round(rms, 1),
+        self.data.update({"clicks": clicks, "P": p, "rms_px": round(rms, 1), "k1": k1,
                           "rotation": self.data.get("rotation", 0) if rotation is None else int(rotation) % 4,
                           "mirror": self.data.get("mirror", False) if mirror is None else bool(mirror)})
         self.using_default = False
@@ -167,6 +216,12 @@ class CameraSetup:
         self.data["rotation"], self.data["mirror"] = int(rotation) % 4, bool(mirror)
         self.using_default = False
         self.save()
+
+    def set_lens(self, lens: float) -> dict:
+        """Change the lens bend and solve again from the stored clicks. Raises CalibrationError."""
+        if not self.ready or not self.data.get("clicks"):
+            raise CalibrationError("click the corners and save first")
+        return self.set_clicks(self.data["clicks"], lens=lens)
 
     def clear(self) -> None:
         """Drop the person's own setup. The shipped default (if any) takes over again."""
@@ -179,4 +234,5 @@ class CameraSetup:
         if not self.ready:
             return None
         cx, cy = orient(x, y, self.data.get("rotation", 0), self.data.get("mirror", False))
-        return project(self.data["P"], cx, cy, height - bed_z)
+        q = project(self.data["P"], cx, cy, height - bed_z)
+        return distort(q[0], q[1], self.lens) if q else None

@@ -92,6 +92,7 @@ class SetupBody(BaseModel):
     clicks: list[dict] = Field(default_factory=list, max_length=64)
     rotation: int | None = Field(default=None, ge=0, le=3)
     mirror: bool | None = None
+    lens: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 SETUP_SHOWN = ("setup_30", "setup_07", "setup_05")  # the only pictures the setup page lists
@@ -424,7 +425,7 @@ def create_app(ctx: ApiContext) -> FastAPI:
         st = a.tracker.status
         return {"ready": a.camera_setup.ready, "rms_px": a.camera_setup.data.get("rms_px"),
                 "rotation": a.camera_setup.data.get("rotation", 0), "mirror": a.camera_setup.data.get("mirror", False),
-                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames, "using_default": a.camera_setup.using_default,
+                "clicks": a.camera_setup.data.get("clicks", []), "frames": frames, "lens": a.camera_setup.lens, "using_default": a.camera_setup.using_default,
                 "bed_z_now": a._bed_z(), "homed": st.get("toolhead", {}).get("homed_axes", ""),
                 "print_state": a.tracker.print_state, "bed_at_top": a.bed_at_top(), "move": a.setup_mover.status(),
                 "moves_allowed": a.cfg.controls.setup_moves, "last_print": a.last_print()}
@@ -470,7 +471,12 @@ def create_app(ctx: ApiContext) -> FastAPI:
                     raise HTTPException(400, "a clicked picture no longer exists")
                 c["bed_z"] = m["bed_z"]
             try:
-                a.camera_setup.set_clicks(body.clicks, body.rotation, body.mirror)
+                a.camera_setup.set_clicks(body.clicks, body.rotation, body.mirror, body.lens)
+            except (CalibrationErrorApi, KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+        elif body.lens is not None:
+            try:
+                a.camera_setup.set_lens(body.lens)
             except (CalibrationErrorApi, KeyError, TypeError, ValueError) as exc:
                 raise HTTPException(400, str(exc)) from exc
         elif body.rotation is not None or body.mirror is not None:
@@ -496,13 +502,21 @@ def create_app(ctx: ApiContext) -> FastAPI:
             return {"lines": []}
         z, top = m["bed_z"], m.get("height_now") or 0.0
         to = a.camera_setup.to_image
-        lines = [{"kind": "plate", "pts": [to(x, y, 0, z) for x, y in ((0, 0), (270, 0), (270, 270), (0, 270), (0, 0))]}]
+
+        def cut(poly: list[tuple[float, float]], n: int = 12) -> list[tuple[float, float]]:
+            """Edges cut in pieces, so the lens bend shows as a curve."""
+            out = []
+            for (x0, y0), (x1, y1) in zip(poly, poly[1:]):
+                out += [(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n) for i in range(n)]
+            return out + [poly[-1]]
+
+        lines = [{"kind": "plate", "pts": [to(x, y, 0, z) for x, y in cut([(0, 0), (270, 0), (270, 270), (0, 270), (0, 0)])]}]
         for o in m.get("objects") or []:
             poly = [(float(p[0]), float(p[1])) for p in o["polygon"] if isinstance(p, list) and len(p) >= 2]
             if len(poly) >= 3:
-                lines.append({"kind": "part", "pts": [to(x, y, 0, z) for x, y in poly + poly[:1]]})
+                lines.append({"kind": "part", "pts": [to(x, y, 0, z) for x, y in cut(poly + poly[:1])]})
                 if top:
-                    lines.append({"kind": "part_top", "pts": [to(x, y, top, z) for x, y in poly + poly[:1]]})
+                    lines.append({"kind": "part_top", "pts": [to(x, y, top, z) for x, y in cut(poly + poly[:1])]})
         return {"lines": [ln for ln in lines if all(p is not None for p in ln["pts"])]}
 
     @app.get("/api/print/expected.png", dependencies=[Depends(auth)])

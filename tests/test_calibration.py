@@ -5,7 +5,8 @@ import random
 
 import pytest
 
-from guardian.camera.calibration import CORNERS, CalibrationError, CameraSetup, orient, project, solve_camera
+from guardian.camera.calibration import (CORNERS, CalibrationError, CameraSetup, distort, orient, project, solve_camera,
+                                         undistort)
 
 # A made-up camera looking at the plate from the front left and above.
 P_TRUE = [[4.2, -1.1, 0.3, 300.0], [0.6, 1.4, -4.0, 600.0], [0.0007, 0.0022, 0.0009, 1.0]]
@@ -23,7 +24,7 @@ def clicks_at(bed_z, frame, noise=0.0, rnd=None):
 
 def test_solves_the_camera_from_two_bed_heights(tmp_path):
     setup = CameraSetup(tmp_path)
-    d = setup.set_clicks(clicks_at(0.2, "a") + clicks_at(30.0, "b"))
+    d = setup.set_clicks(clicks_at(0.2, "a") + clicks_at(30.0, "b"), lens=0)
     assert d["rms_px"] < 0.5
     for x, y, h, z in [(135, 135, 10, 10), (50, 200, 0, 45), (260, 20, 40, 41)]:
         want = project(P_TRUE, x, y, h - z)
@@ -43,7 +44,7 @@ def test_hidden_corners_can_be_skipped(tmp_path):
     # Skip corner 1 at the high bed and corner 2 at the low bed: 6 points left, still a fit.
     cl = [c for c in clicks_at(0.2, "a") if c["corner"] != 2] + [c for c in clicks_at(30.0, "b") if c["corner"] != 1]
     assert len(cl) == 6
-    assert CameraSetup(tmp_path).set_clicks(cl)["rms_px"] < 0.5
+    assert CameraSetup(tmp_path).set_clicks(cl, lens=0)["rms_px"] < 0.5
 
 
 def test_a_bad_click_is_marked(tmp_path):
@@ -85,3 +86,28 @@ def test_shipped_default_is_used_until_the_person_saves_their_own(tmp_path, monk
     assert not fresh.using_default and CameraSetup(tmp_path / "b").data["rotation"] == 1
     fresh.clear()  # Start over goes back to the default
     assert fresh.using_default and fresh.data["rotation"] == first.data["rotation"]
+
+
+def test_lens_bend_goes_there_and_back():
+    for u, v in [(100, 80), (960, 540), (1800, 1000), (30, 1050)]:
+        for k in (0.0, 0.2, 0.7):
+            back = undistort(*distort(u, v, k), k)
+            assert abs(back[0] - u) < 1e-4 and abs(back[1] - v) < 1e-4
+
+
+def test_a_bent_camera_fits_best_with_its_own_bend(tmp_path):
+    k = 0.3
+    cl = clicks_at(0.2, "a") + clicks_at(30.0, "b")
+    for c in cl:  # what a wide angle camera would show: the pinhole points pushed by the lens
+        c["u"], c["v"] = distort(c["u"], c["v"], k)
+    s = CameraSetup(tmp_path)
+    assert s.set_clicks(cl, lens=k)["rms_px"] < 0.5
+    assert s.lens == k
+    # Changing the bend solves again from the stored clicks, and to_image bends its answer the same way.
+    flat = s.set_lens(0.0)["rms_px"]
+    assert flat > 1.0 and s.lens == 0.0
+    s.set_lens(k)
+    x, y = 100, 150
+    want = distort(*project(P_TRUE, x, y, -30.0 + 5.0), k)
+    got = s.to_image(x, y, 5.0, 30.0)
+    assert math.hypot(want[0] - got[0], want[1] - got[1]) < 1.0
