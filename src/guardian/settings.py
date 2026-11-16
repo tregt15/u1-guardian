@@ -93,6 +93,9 @@ FIELDS: list[dict[str, Any]] = [
      "min": 1, "max": 600, "help": "Footage saved from before the problem."},
     {"key": "blackbox.post_trigger_s", "group": "Recording", "label": "Seconds after a problem", "kind": "number",
      "min": 0, "max": 600, "help": "Footage saved after the problem."},
+    {"key": "storage.max_age_days", "group": "Recording", "label": "Delete clips after (days)", "kind": "number",
+     "min": 0, "max": 3650, "help": "Saved incidents, with their clips and files, are deleted after this many days. "
+     "0 keeps everything. Protected incidents are never deleted."},
     {"key": "notifications.email.enabled", "group": "Email alerts", "label": "Send email alerts", "kind": "bool",
      "help": "Uses your own free Resend account. Paste your Resend API key below."},
     {"key": "notifications.email.to_addrs", "group": "Email alerts", "label": "Send to", "kind": "emails",

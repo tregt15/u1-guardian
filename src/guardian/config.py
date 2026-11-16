@@ -79,7 +79,8 @@ class StorageConfig(_Section):
     data_dir: Path | None = None
     buffer_dir: Path | None = None
     max_total_gb: float = Field(default=5.0, gt=0)
-    max_age_days: int = Field(default=90, gt=0)
+    # Incidents (clips and files) older than this are deleted. 0 keeps everything. Protected ones are kept.
+    max_age_days: int = Field(default=7, ge=0)
     max_incidents: int = Field(default=500, gt=0)
     warn_free_gb: float = Field(default=2.0, ge=0)
 

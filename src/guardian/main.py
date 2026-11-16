@@ -55,6 +55,7 @@ from guardian.printer.toolchanger import ToolchangeMonitor
 from guardian import secrets_store, selftest
 from guardian import settings as settings_mod
 from guardian.storage.db import Database
+from guardian.storage.retention import purge_old
 
 log = logging.getLogger("guardian")
 
@@ -145,6 +146,7 @@ class App:
         self.health = HealthWatch(self.clock, lambda: self.tracker.status, self._report)
         self.selftest_result: dict | None = None
         self.firmware_changed: tuple[str, str] | None = None  # (old, new)
+        self._purge_at: float | None = None
         self.started_utc = self.clock.now_utc()
         channels = []
         if cfg.notifications.email.enabled:
@@ -796,6 +798,13 @@ class App:
                 await self.health.tick()
             except Exception:  # noqa: BLE001
                 log.exception("health check tick failed")
+            try:
+                now = self.clock.monotonic()
+                if self._purge_at is None or now >= self._purge_at:  # at start, then once an hour
+                    self._purge_at = now + 3600.0
+                    await asyncio.to_thread(purge_old, self.cfg.storage, self.db, self.clock)
+            except Exception:  # noqa: BLE001
+                log.exception("old incident cleanup failed")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=TICK_S)
             except asyncio.TimeoutError:

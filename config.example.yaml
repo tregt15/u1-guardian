@@ -67,7 +67,7 @@ storage:
   # data_dir: ./data
   # buffer_dir: ./data/buffer   # on a Pi, point this at a RAM disk (tmpfs)
   max_total_gb: 5
-  max_age_days: 90
+  max_age_days: 7   # delete incidents older than this, 0 keeps everything (protected ones are always kept)
   max_incidents: 500
   warn_free_gb: 2
 
