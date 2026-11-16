@@ -21,6 +21,10 @@ from guardian.camera.simulate import H, SRC_W, W, _fill, _shade, camera_centre
 
 PLATE = (46, 49, 56)
 EDGE = (120, 108, 70)
+# The camera fit was made from bed heights of 5 to 50 mm. With the bed at Z 200 the real print top was about 17 px (3.5 mm) lower in the
+# picture than the model put it, so the bed height is stretched a little: 200 mm counts as 200 * BED_SCALE. Measured on one
+# picture (2026-11-16). UNVERIFIED for other heights. Better would be clicks on a picture with the bed far down.
+BED_SCALE = 1.017
 RIM_MM = 14.0          # the bed's white side edge, below the plate top. Moves with the bed.
 HEAD_DEPTH = 26.0      # how far a docked toolhead reaches back from its front face (y = -12)
 HEAD_FRONT_Y = -12.0

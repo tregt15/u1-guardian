@@ -228,16 +228,27 @@ def build():
                          ((1700, 0), (1715, 110), 12, (10, 10, 12)), ((1760, 0), (1775, 105), 10, (12, 12, 14)),
                          ((1800, 0), (1790, 100), 10, (14, 14, 16)), ((1860, 0), (1860, 105), 10, (12, 12, 12))):
         add(DOCK, stroke(a, b, w), col)
-    # chair and clutter above the printer (far away)
-    add([ROOM, ROOM_L], [(1020, 150), (1090, 120), (1180, 95), (1260, 58), (1272, 100), (1230, 150)], (156, 104, 70))
-    add([ROOM, ROOM_L], [(870, 120), (950, 100), (1010, 110), (1020, 150), (900, 140)], (24, 24, 26))
+    # (the chair and clutter seen above the printer in the photo are left out: they are not part of the printer)
     # ---- toolheads: box from the traced front face, then decals on the face ----
-    faces = [((1226, 152), (1347, 140), (1350, 438), (1226, 441)),
-             ((1386, 138), (1565, 126), (1566, 440), (1386, 442)),
-             ((1570, 112), (1768, 118), (1768, 452), (1570, 447)),
-             ((1775, 108), (1990, 100), (1990, 468), (1775, 462))]
-    for f in faces:  # the traced corners (top left, top right, bottom right, bottom left) on the dock plane, as they are
-        HEAD_QUADS.append([hit(u, v, DOCK) for u, v in f])
+    # Four identical heads on an even step. One face shape (width and height as 3D vectors) is averaged from the traced faces,
+    # and each head is that shape moved along the dock by the average step. So the heads match each other exactly and still
+    # lean the way the real dock does in the camera fit (a plain rectangle in x and z does not: it leaned the wrong way).
+    traced = [[hit(u, v, DOCK) for u, v in f] for f in (
+        ((1226, 152), (1347, 140), (1350, 438), (1226, 441)), ((1386, 138), (1565, 126), (1566, 440), (1386, 442)),
+        ((1570, 112), (1768, 118), (1768, 452), (1570, 447)), ((1775, 108), (1990, 100), (1990, 468), (1775, 462)))]
+
+    def sub(a, b):
+        return [a[k] - b[k] for k in range(3)]
+
+    def mean(vs):
+        return [sum(v[k] for v in vs) / len(vs) for k in range(3)]
+    wv = mean([sub(q[1], q[0]) for q in traced[:3]] + [sub(q[2], q[3]) for q in traced[:3]])    # the 4th is cut by the picture edge
+    hv = mean([sub(q[3], q[0]) for q in traced] + [sub(q[2], q[1]) for q in traced[:3]])
+    step = [(traced[3][0][k] - traced[0][0][k]) / 3.0 for k in range(3)]
+    for i in range(4):
+        tl = [traced[0][0][k] + step[k] * i for k in range(3)]
+        quad = [tl, [tl[k] + wv[k] for k in range(3)], [tl[k] + wv[k] + hv[k] for k in range(3)], [tl[k] + hv[k] for k in range(3)]]
+        HEAD_QUADS.append([tuple(round(c, 1) for c in pt) for pt in quad])
 
     def face_pt(i, fx, fy):  # fractions of the front face (0..1) to a 3D point (bilinear between the 4 corners)
         tl, tr, br, bl = HEAD_QUADS[i]

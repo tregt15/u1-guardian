@@ -106,7 +106,7 @@ def test_the_3d_scene_draws_the_interior_under_a_lowered_bed(tmp_path, shipped_c
     rows = pixels(simulate.render(s, blocks, 200.0, ["#000000", "#ff0000"]))
     view = scene3d.View(s)
     cx, cy = view.to_corner(136.5, 136.5)
-    u, v = view.px(cx, cy, 195.0 - 200.0)  # the top of the column
+    u, v = view.px(cx, cy, 195.0 - 200.0 * scene3d.BED_SCALE)  # the top of the column
     assert v < simulate.H  # it is inside the picture
     r, g, b = px(rows, u, v)
     assert r > 150 and g < 40 and b < 40

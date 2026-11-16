@@ -97,6 +97,7 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
     if view.cam is None:
         return None
     cam = view.cam
+    bed_z = bed_z * S.BED_SCALE  # see scene3d.BED_SCALE
     rgb = S.background(view)
     S.draw_heads(rgb, view, away)
     S.draw_bed(rgb, view, bed_z)
