@@ -4,10 +4,11 @@ The print so far (the plate height map read from the G-code up to where the prin
 through the camera fit from Camera setup (camera/calibration.py). The picture has the same viewpoint as the real camera,
 so a person can put it next to the live picture, and the AI can be given both and asked what is different.
 
-It is a simulation, not a photo: plain colors, no shadows, no toolheads. It bends straight lines like the wide angle lens
-does (one number, "Lens bend" on the Camera setup page). The enclosure walls are drawn as plain dark panels at a guessed
-distance from the plate (WALL_MARGIN, WALL_TOP below), only to give the plate some surroundings. UNVERIFIED: the wall
-distances, and how well it lines up with the real picture on the real U1.
+It is a simulation, not a photo: plain colors, no shadows. It bends straight lines like the wide angle lens
+does (one number, "Lens bend" on the Camera setup page). Behind the plate it draws a flat backdrop of the printer interior
+(rear wall, fan, gantry rails, toolhead docks, purge bin). The backdrop was traced by eye from one real camera picture, so
+it already has the lens bend in it. UNVERIFIED: how well it matches other pictures. Toolheads away from their docks and
+the bin contents are not drawn.
 
 Pure Python (standard library only), so it also runs on a Raspberry Pi. 960 x 540 draws in well under a second.
 """
@@ -24,10 +25,6 @@ SRC_W = 1920  # the clicks in the camera setup are in full size (1920 wide) pict
 BACKGROUND = (28, 30, 36)
 PLATE = (46, 49, 56)
 EDGE = (120, 108, 70)
-WALL = (36, 39, 47)
-WALL_LINE = (52, 56, 66)
-WALL_MARGIN = 15.0  # mm from the plate edge to the wall. UNVERIFIED guess.
-WALL_TOP = 300.0  # mm above the plate top when the bed is at the top. UNVERIFIED guess.
 SEGMENTS = 24  # long edges are cut in pieces so they can bend with the lens
 
 
@@ -82,6 +79,44 @@ def _shade(c: tuple[int, int, int], f: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, int(v * f))) for v in c)  # type: ignore[return-value]
 
 
+# Backdrop shapes in full size (1920 x 1080) camera picture pixels, traced from a real picture with the bed at the bottom.
+# (color, points). Drawn first, in this order.
+def _circle(cx: float, cy: float, r: float) -> list[tuple[float, float]]:
+    return [(cx + r * math.cos(i * math.pi / 20), cy + r * math.sin(i * math.pi / 20)) for i in range(40)]
+
+
+BACKDROP: list[tuple[tuple[int, int, int], list[tuple[float, float]]]] = [
+    ((20, 21, 24), [(0, 0), (1920, 0), (1920, 1080), (0, 1080)]),
+    ((34, 36, 41), [(230, 70), (1140, 170), (1150, 420), (200, 440)]),  # gantry plate
+    ((62, 64, 70), [(240, 125), (1090, 205), (1090, 225), (240, 150)]),  # top rail
+    ((120, 122, 128), [(260, 262), (1130, 318), (1130, 328), (260, 272)]),  # bright rail
+    ((70, 72, 78), [(235, 345), (1120, 375), (1120, 388), (235, 360)]),  # lower rail
+    ((44, 46, 52), [(0, 600), (310, 555), (1225, 525), (1245, 1080), (0, 1080)]),  # rear wall
+    ((56, 58, 65), [(435, 548), (970, 545), (1000, 1080), (440, 1080)]),  # centre panel
+    ((24, 25, 28), _circle(645, 890, 125)),  # fan
+    ((52, 54, 60), _circle(645, 890, 80)),
+    ((150, 152, 158), [(320, 470), (395, 465), (430, 1080), (335, 1080)]),  # left lead screw
+    ((165, 167, 172), [(960, 462), (990, 462), (995, 1000), (965, 1000)]),  # right rod
+    ((205, 205, 210), [(70, 0), (260, 40), (215, 120), (105, 210), (100, 380), (200, 450), (130, 485), (55, 470), (20, 390), (25, 150)]),
+    ((16, 17, 19), [(1225, 130), (1360, 130), (1350, 470), (1225, 470)]),  # toolheads
+    ((16, 17, 19), [(1385, 125), (1545, 125), (1535, 470), (1385, 470)]),
+    ((16, 17, 19), [(1570, 110), (1730, 110), (1735, 475), (1570, 475)]),
+    ((16, 17, 19), [(1775, 100), (1920, 100), (1920, 490), (1775, 490)]),
+    ((190, 172, 50), [(1268, 340), (1300, 340), (1284, 375)]),  # warning marks
+    ((190, 172, 50), [(1432, 340), (1470, 340), (1451, 380)]),
+    ((190, 172, 50), [(1626, 345), (1665, 345), (1645, 388)]),
+    ((190, 172, 50), [(1848, 350), (1888, 350), (1868, 392)]),
+    ((172, 175, 180), [(1145, 560), (1920, 640), (1920, 890), (1670, 880), (1225, 740), (1160, 600)]),  # purge bin
+    ((24, 24, 27), [(1230, 880), (1850, 930), (1700, 1080), (1190, 1080)]),  # floor under the bin
+]
+
+
+def _backdrop(rgb: bytearray) -> None:
+    k = W / SRC_W
+    for color, pts in BACKDROP:
+        _fill(rgb, [(x * k, y * k) for x, y in pts], color)
+
+
 def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z: float, colors: list[str],
            cell_mm: int = 3, max_z: float = 0.0) -> bytes | None:
     """PNG of the print as the camera should see it. blocks: (cx, cy, height_mm, tool) for each cell_mm block.
@@ -118,24 +153,7 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
         return out
 
     rgb = bytearray(bytes(BACKGROUND) * (W * H))
-    # Walls on the far sides of the plate (the sides the camera is not on): plain dark panels with a line every 50 mm.
-    # They are in the plate frame the camera was set up in (the clicked corner frame), so they are not turned or mirrored.
-    mid, m, z0 = PLATE_MM / 2, WALL_MARGIN, -bed_z - 15.0
-    lo, hi = -m, PLATE_MM + m
-    for axis, at in ((0, -m), (0, PLATE_MM + m), (1, -m), (1, PLATE_MM + m)):
-        if (cam[axis] - at) * (mid - at) <= 0:
-            continue  # the camera is outside this wall, so it is a near wall and would hide the plate
-        def at_pt(t: float, z: float, axis: int = axis, at: float = at) -> tuple[float, float, float]:
-            return (at, t, z) if axis == 0 else (t, at, z)
-        outline = ring([at_pt(lo, z0), at_pt(hi, z0), at_pt(hi, WALL_TOP), at_pt(lo, WALL_TOP)])
-        if not outline:
-            continue
-        _fill(rgb, outline, WALL)
-        for z in range(int(z0) + 50, int(WALL_TOP), 50):
-            row = [to_px(*at_pt(t, z)) for t in range(int(lo), int(hi) + 1, 15)]
-            for a, b in zip(row, row[1:]):
-                if a and b:
-                    _line(rgb, a, b, WALL_LINE)
+    _backdrop(rgb)
     plate = ring([(*orient(x, y, rot, mirror), -bed_z) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))])
     if plate:
         _fill(rgb, plate, PLATE)

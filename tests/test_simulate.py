@@ -75,7 +75,7 @@ def test_plate_map_blocks_keep_the_tallest_cell_and_its_tool():
     assert sorted(plate.blocks()) == [(3, 3, 8.0, 0), (4, 3, 4.2, 1)]
 
 
-def test_the_lens_bend_moves_the_picture_and_walls_are_drawn(tmp_path):
+def test_the_lens_bend_moves_the_picture_and_the_backdrop_is_drawn(tmp_path):
     s = setup_for(tmp_path)
     flat = simulate.render(s, [], 5.0, [])
     s.set_lens(0.4)
@@ -83,4 +83,4 @@ def test_the_lens_bend_moves_the_picture_and_walls_are_drawn(tmp_path):
     assert flat != bent
     rows = pixels(bent)
     colors = {px(rows, x, y) for x in range(0, simulate.W, 8) for y in range(0, simulate.H, 8)}
-    assert simulate.WALL in colors and simulate.PLATE in colors  # a wall panel behind the plate
+    assert simulate.PLATE in colors and (56, 58, 65) in colors  # the plate, and the centre panel of the backdrop
