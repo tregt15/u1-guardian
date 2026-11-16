@@ -295,6 +295,20 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
         o = orient((cx + 0.5) * cell_mm, (cy + 0.5) * cell_mm, rot, mirror)
         order.append((-math.hypot(o[0] - cam[0], o[1] - cam[1]), cx, cy, h, t, o))
     order.sort()  # far blocks first, so near ones cover them
+    # A soft shadow on the plate around the print: the plate under every block, one cell wider, made darker once.
+    mask = bytearray(W * H)
+    for _, cx, cy, h, t, o in order:
+        x0, y0 = (cx - 1) * cell_mm, (cy - 1) * cell_mm
+        q = [to_px(*orient(x0 + ex * 3 * cell_mm, y0 + ey * 3 * cell_mm, rot, mirror), -bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
+        if all(q):
+            for y, a, b in _spans(q):  # type: ignore[arg-type]
+                mask[y * W + a:y * W + b + 1] = bytes([1]) * (b - a + 1)
+    for i in range(len(mask)):
+        if mask[i]:
+            j = i * 3
+            rgb[j] = rgb[j] * 3 // 5
+            rgb[j + 1] = rgb[j + 1] * 3 // 5
+            rgb[j + 2] = rgb[j + 2] * 3 // 5
     neighbours = ((0, -1, 0, 0, 1, 0), (1, 0, 1, 0, 1, 1), (0, 1, 0, 1, 1, 1), (-1, 0, 0, 0, 0, 1))  # dx, dy, edge corners
     for _, cx, cy, h, t, o in order:
         base = tools[t % len(tools)]
@@ -314,6 +328,6 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
                 _fill(rgb, q, _shade(base, 0.5 + 0.1 * i))  # type: ignore[arg-type]
         q = [to_px(*orient(x0 + ex * cell_mm, y0 + ey * cell_mm, rot, mirror), h - bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
         if all(q):
-            grain = 0.95 + 0.05 * ((cx * 7 + cy * 13) % 5) / 4  # a little variation, so a flat top does not look like paint
+            grain = 0.94 + 0.06 * ((cx * 7 + cy * 13 + int(h * 5)) % 5) / 4  # also a little layer to layer change  # a little variation, so a flat top does not look like paint
             _fill(rgb, q, _shade(base, (0.8 + 0.2 * (h / top)) * grain))  # type: ignore[arg-type]
     return png(W, H, rgb)

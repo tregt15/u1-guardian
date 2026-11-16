@@ -406,7 +406,13 @@ class App:
         plate = self.gcode.plate
         have = bool(name and self.gcode.filename == name and plate.max_z)
         colors = self._file_meta.get("hex") or [] if self._file_meta.get("filename") == name else []
-        return render_simulation(self.camera_setup, plate.blocks() if have else [], z, colors, max_z=plate.max_z if have else 0.0,
+        cell, blocks = 1, []
+        if have:
+            for cell in (1, 2, 3):  # the finest blocks that stay quick to draw
+                blocks = plate.blocks(cell)
+                if len(blocks) <= 30000:
+                    break
+        return render_simulation(self.camera_setup, blocks, z, colors, cell_mm=cell, max_z=plate.max_z if have else 0.0,
                                  reference=self._reference())
 
     async def _refresh_file_meta(self) -> None:
