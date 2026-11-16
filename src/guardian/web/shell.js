@@ -139,6 +139,76 @@ async function printerControl(action) {
   } catch (e) { toast("Not sent: " + e.message, "t-crit"); return false; }
 }
 
+// Reprint, print a file, upload a file. Each asks the person to confirm and to say the plate is empty.
+function plateDialog(message, okText) {
+  return new Promise((resolve) => {
+    const box = el("input", { type: "checkbox", id: "plate-clear" });
+    const okBtn = el("button", { type: "button", class: "btn btn-primary" }, okText);
+    const close = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+    const dlg = el("dialog", { class: "g-dialog" },
+      el("p", {}, message),
+      el("label", { class: "row", style: "gap:8px;margin:10px 0" }, box, el("span", {}, "The build plate is empty and clear.")),
+      el("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+        el("button", { type: "button", class: "btn btn-secondary", onclick: () => close(false) }, "Cancel"), okBtn));
+    okBtn.addEventListener("click", () => { if (!box.checked) { box.focus(); return; } close(true); });
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(false); });
+    document.querySelector(".g-app").append(dlg);
+    dlg.showModal();
+    box.focus();
+  });
+}
+
+async function startPrint(filename) {
+  const what = filename ? filename : "the last file again";
+  if (!await plateDialog("Start printing " + what + "? Look at the printer first.", "Start print")) return false;
+  try {
+    const r = await api("/api/printer/start", { method: "POST", body: JSON.stringify({ confirm: true, plate_clear: true, filename: filename || null }) });
+    toast("Start sent to the printer: " + r.started, "t-ok");
+    return true;
+  } catch (e) { toast("Not started: " + e.message, "t-crit"); return false; }
+}
+
+async function pickPrintFile() {
+  let files;
+  try { files = (await api("/api/printer/files")).files; } catch (e) { toast(e.message, "t-crit"); return false; }
+  if (!files.length) { toast("The printer has no G-code files.", "t-info"); return false; }
+  const picked = await new Promise((resolve) => {
+    const close = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+    const dlg = el("dialog", { class: "g-dialog" },
+      el("p", {}, "Pick a file to print. Newest first."),
+      el("div", { style: "max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:6px" },
+        ...files.map(f => el("button", { type: "button", class: "btn btn-secondary", style: "justify-content:flex-start;text-align:left",
+          onclick: () => close(f.path) }, f.path + (f.modified ? "  (" + new Date(f.modified * 1000).toLocaleString() + ")" : "")))),
+      el("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
+        el("button", { type: "button", class: "btn btn-secondary", onclick: () => close(null) }, "Cancel")));
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(null); });
+    document.querySelector(".g-app").append(dlg);
+    dlg.showModal();
+  });
+  return picked ? startPrint(picked) : false;
+}
+
+function uploadPrintFile() {
+  return new Promise((resolve) => {
+    const input = el("input", { type: "file", accept: ".gcode,.gco,.g", style: "display:none" });
+    input.addEventListener("change", async () => {
+      const f = input.files[0];
+      input.remove();
+      if (!f) { resolve(false); return; }
+      if (!await ask("Send " + f.name + " to the printer? It will not start printing.", { ok: "Send file" })) { resolve(false); return; }
+      toast("Sending " + f.name + "...", "t-info");
+      try {
+        await api("/api/printer/files/upload?confirm=true&name=" + encodeURIComponent(f.name), { method: "POST", body: f,
+          headers: { "Content-Type": "application/octet-stream" } });
+        toast(f.name + " is on the printer. Use Print a file to start it.", "t-ok");
+        resolve(true);
+      } catch (e) { toast("Not sent: " + e.message, "t-crit"); resolve(false); }
+    });
+    document.querySelector(".g-app").append(input);
+    input.click();
+  });
+}
+
 const THEMES = ["auto", "light", "dark"];  // auto follows the computer's setting
 
 const Shell = {

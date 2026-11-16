@@ -112,6 +112,12 @@ The dashboard has Pause, Resume and Stop buttons while a print runs. Each asks y
 type STOP, because a stopped print cannot be resumed. They use Moonraker's normal requests, the same as Fluidd.
 Guardian only resumes or stops a print when you click. Turn the buttons off on the Settings page if you like.
 
+When the printer is idle, the dashboard also has **Reprint last file**, **Print a file** and **Upload a file**. Each asks
+you to confirm and to tick that the plate is empty. Upload only sends the file. It does not start a print. These
+buttons never show during a print, and Guardian never starts a print by itself. Turn them off on the Settings page
+(Show Reprint, Print a file and Upload). UNVERIFIED on the real U1 until the first run: it uses Moonraker's normal
+`printer.print.start` and file upload.
+
 ### Live camera
 
 The dashboard shows the printer camera while a print runs (or all the time if Auto camera is set to Always). It uses

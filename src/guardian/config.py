@@ -271,6 +271,9 @@ class ControlsConfig(_Section):
     # The camera setup may home the printer and raise the bed (owner asked, 2026-11-11). Only when idle and after the
     # person confirms the plate is empty.
     setup_moves: bool = True
+    # Reprint, print a file and upload a file from the dashboard (owner asked, 2026-11-15). Only when idle, and only after
+    # a person clicks, confirms and says the plate is empty. Guardian never starts a print by itself.
+    print_files: bool = True
 
 
 class Config(_Section):

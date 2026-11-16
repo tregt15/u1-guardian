@@ -159,6 +159,9 @@ class App:
                                                 "fresh_frame": self._fresh_frame,
                                                 "selftest": self.run_selftest,
                                                 "control": self.printer_control,
+                                                "printer_files": self.printer_files,
+                                                "start_file": self.start_file,
+                                                "upload_file": self.upload_file,
                                                 "latest_frame": self._latest_frame,
                                                 "set_ai_key": self.set_ai_key,
                                                 "cancel_autopause": self.autopause.cancel,
@@ -416,6 +419,76 @@ class App:
         self.db.log("controls", "warning", f"user asked the printer to {action} the print", {"state_before": state})
         return {"sent": action, "state_before": state}
 
+    # ---- reprint, print a file, upload a file (owner asked, 2026-11-15) ----
+    IDLE_STATES = ("standby", "complete", "cancelled")
+
+    @staticmethod
+    def clean_gcode_name(name: str) -> str:
+        """A G-code path on the printer (folders allowed, no '..', no drive or leading slash). Raises ValueError."""
+        n = (name or "").replace("\\", "/").strip()
+        parts = n.split("/")
+        if (not n or n.startswith("/") or ":" in n or any(p in ("", ".", "..") for p in parts)
+                or not n.lower().endswith((".gcode", ".gco", ".g"))):
+            raise ValueError("That is not a G-code file name.")
+        return n
+
+    def _check_can_start(self) -> None:
+        if not self.cfg.controls.print_files:
+            raise ValueError("Print files are turned off in Settings.")
+        state = self.tracker.print_state
+        if state not in self.IDLE_STATES:
+            raise ValueError(f"The printer is {state or 'not connected'}. It must be idle to start a print or send a file.")
+
+    def _files_url(self, tail: str) -> str:
+        return f"http://{self.cfg.printer.host}:{self._printer_port}/server/files/{tail}"
+
+    async def printer_files(self) -> list[dict]:
+        """G-code files on the printer, newest first. Read only. Raises ValueError."""
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as c:
+                r = await c.get(self._files_url("list"), params={"root": "gcodes"})
+            r.raise_for_status()
+            rows = r.json().get("result", [])
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Could not read the printer's file list: {exc}") from exc
+        out = [{"path": f["path"], "size": f.get("size"), "modified": f.get("modified")}
+               for f in rows if isinstance(f, dict) and isinstance(f.get("path"), str)]
+        out.sort(key=lambda f: f["modified"] or 0, reverse=True)
+        return out[:200]
+
+    async def start_file(self, filename: str | None, plate_clear: bool) -> dict:
+        """Start a print. filename None means reprint the last file. A person clicked, confirmed and said the plate is empty."""
+        self._check_can_start()
+        if not plate_clear:
+            raise ValueError("Confirm that the plate is empty first.")
+        name = filename or self.last_print()["file"]
+        if not name:
+            raise ValueError("There is no last file to reprint.")
+        name = self.clean_gcode_name(name)
+        try:
+            await self.client.start_print(name)
+        except RuntimeError as exc:
+            raise ValueError(str(exc)) from exc
+        log.warning("dashboard user asked the printer to start %s", name)
+        self.db.log("controls", "warning", f"user asked the printer to start {name}",
+                    {"reprint": filename is None, "state_before": self.tracker.print_state})
+        return {"started": name}
+
+    async def upload_file(self, name: str, path: Path) -> dict:
+        """Send a G-code file to the printer's gcodes folder. It does not start a print. Raises ValueError."""
+        self._check_can_start()
+        name = self.clean_gcode_name(name)
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as c:
+                with path.open("rb") as fh:
+                    r = await c.post(self._files_url("upload"), data={"root": "gcodes", "print": "false"},
+                                     files={"file": (name, fh, "application/octet-stream")})
+            r.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"The printer did not take the file: {exc}") from exc
+        self.db.log("controls", "warning", f"user sent {name} to the printer", {"bytes": path.stat().st_size})
+        return {"uploaded": name}
+
     def _save_ai_pictures(self, result, frames: list[bytes]) -> None:
         row = self.db.get_incident(result.incident_id)
         if row is None:
@@ -471,6 +544,7 @@ class App:
         self.client.allow_pause = self.cfg.autopause.enabled
         self.client.allow_controls = self.cfg.controls.enabled
         self.client.allow_setup_moves = self.cfg.controls.setup_moves
+        self.client.allow_start_print = self.cfg.controls.print_files
 
     def apply_settings(self, changes: dict) -> list[str]:
         """Check, save and apply dashboard settings. Raises settings.SettingsError."""
@@ -535,7 +609,8 @@ class App:
             "incidents": {"open": self.manager.open_count},
             "toolchanger": self.toolchanger.status(),
             "autopause": self.autopause.status(),
-            "controls": {"enabled": self.cfg.controls.enabled},
+            "controls": {"enabled": self.cfg.controls.enabled, "print_files": self.cfg.controls.print_files},
+            "last_file": self.last_print()["file"],
             "blackbox": {"pre_s": self.cfg.blackbox.pre_trigger_s, "post_s": self.cfg.blackbox.post_trigger_s},
             "match": self.match_status(),
             "print_file": {"read_mb": round(self.gcode.read_upto / 1e6, 1) if self.gcode.filename else 0,

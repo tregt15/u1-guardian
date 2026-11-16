@@ -32,6 +32,9 @@ FIELDS: list[dict[str, Any]] = [
     {"key": "controls.setup_moves", "group": "Printer controls", "label": "Let the camera setup move the bed",
      "kind": "bool", "help": "When you open Camera setup, Guardian can home the printer and raise the bed so the camera "
      "sees the plate. It asks you to confirm the plate is empty first, and never does it during a print."},
+    {"key": "controls.print_files", "group": "Printer controls", "label": "Show Reprint, Print a file and Upload",
+     "kind": "bool", "help": "Buttons on the dashboard to start a print or send a file to the printer. Only when the printer "
+     "is idle. Each asks you to confirm that the plate is empty. Guardian never starts a print by itself."},
     {"key": "autopause.enabled", "group": "Auto pause", "label": "Pause the print on a problem", "kind": "bool",
      "help": "If Guardian finds a problem below and the printer did not pause by itself, Guardian pauses it."},
     {"key": "autopause.grace_s", "group": "Auto pause", "label": "Wait before pausing (seconds)", "kind": "number",

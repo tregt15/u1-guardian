@@ -107,6 +107,10 @@ function drawHero(s) {
       ctl && state === "printing" ? el("div", { class: "ctrl" },
         el("button", { type: "button", class: "btn btn-secondary", onclick: () => printerControl("pause").then(() => Shell.poll()) }, ic("i-pause"), "Pause"),
         el("button", { type: "button", class: "btn btn-danger-quiet", onclick: () => printerControl("cancel").then(() => Shell.poll()) }, ic("i-stop"), "Stop")) : null,
+      (s.controls || {}).print_files && state === "idle" && ["standby", "complete", "cancelled"].includes(p.print_state) ? el("div", { class: "ctrl" },
+        s.last_file ? el("button", { type: "button", class: "btn btn-primary", title: s.last_file, onclick: () => startPrint(null).then(() => Shell.poll()) }, ic("i-play"), "Reprint last file") : null,
+        el("button", { type: "button", class: "btn btn-secondary", onclick: () => pickPrintFile().then(() => Shell.poll()) }, "Print a file"),
+        el("button", { type: "button", class: "btn btn-secondary", onclick: () => uploadPrintFile() }, "Upload a file")) : null,
       ctl && state === "paused" ? el("div", { class: "ctrl" }, el("a", { class: "btn btn-primary", href: "#paused" }, "Review and resume")) : null));
   return hero;
 }

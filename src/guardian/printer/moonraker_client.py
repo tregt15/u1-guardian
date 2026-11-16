@@ -15,6 +15,9 @@ Two exceptions, both owner approved (2026-11-09), each behind its own switch:
   paused. Verified on the real U1 (2026-11-10): it paused a print.
 - `printer.gcode.script` with exactly one of SETUP_SCRIPTS (allow_setup_moves): home, park the toolhead at the back middle, then raise the bed to
   30 mm, 7 mm and 5 mm for the camera setup, only when idle and after the person confirmed the plate is empty.
+- `printer.print.start` with exactly {"filename": name} (allow_start_print, owner asked 2026-11-15). Only sent when a
+  person clicks Reprint or picks a file on the dashboard, confirms, and says the plate is empty. Only when idle.
+  UNVERIFIED on the real U1 (standard Moonraker name).
 - `printer.print.resume` and `printer.print.cancel` with no params (allow_controls). Only sent when a
   person clicks Resume or Stop on the dashboard and confirms (owner asked, 2026-11-10). Guardian
   itself never sends them.
@@ -50,6 +53,7 @@ CAMERA_START_PARAMS = {"domain": "lan", "interval": 0}
 PAUSE = "printer.print.pause"
 RESUME = "printer.print.resume"
 CANCEL = "printer.print.cancel"
+START = "printer.print.start"
 GCODE = "printer.gcode.script"
 # The only G-code Guardian may ever send (owner approved, 2026-11-11): homing, the toolhead at the back middle, and three bed heights for the camera setup.
 # The U1 Z home is at the bottom (position_endstop 275), so homing lowers the bed. Z 5 is the lowest it goes.
@@ -72,6 +76,7 @@ class MoonrakerClient:
         allow_pause: bool = False,
         allow_controls: bool = False,
         allow_setup_moves: bool = False,
+        allow_start_print: bool = False,
     ) -> None:
         self.url = f"ws://{host}:{port}/websocket"
         self.bus = bus
@@ -86,6 +91,7 @@ class MoonrakerClient:
         self.allow_pause = allow_pause
         self.allow_controls = allow_controls
         self.allow_setup_moves = allow_setup_moves
+        self.allow_start_print = allow_start_print
         self._pending: dict[int, asyncio.Future] = {}
         self._ws = None
         self._next_id = 1000
@@ -96,7 +102,9 @@ class MoonrakerClient:
         control_ok = self.allow_controls and method in (RESUME, CANCEL) and params is None
         setup_ok = (self.allow_setup_moves and method == GCODE and isinstance(params, dict) and set(params) == {"script"}
                     and params["script"] in SETUP_SCRIPTS)
-        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok and not control_ok and not setup_ok:
+        start_ok = (self.allow_start_print and method == START and isinstance(params, dict) and set(params) == {"filename"}
+                    and isinstance(params["filename"], str) and bool(params["filename"]))
+        if method not in ALLOWED_METHODS and not camera_ok and not pause_ok and not control_ok and not setup_ok and not start_ok:
             raise RuntimeError(f"refusing to send {method}: not on the read-only list")
         msg: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": rpc_id}
         if params is not None:
@@ -125,8 +133,15 @@ class MoonrakerClient:
         """Only for the dashboard Stop button (a person clicked and confirmed)."""
         return await self._simple(CANCEL)
 
+    async def start_print(self, filename: str, timeout: float = 30.0) -> None:
+        """Start printing a file that is already on the printer. Only for a person's confirmed click. Raises RuntimeError."""
+        await self._call(START, {"filename": filename}, timeout, "The printer did not answer in time.")
+
     async def setup_move(self, script: str, timeout: float = 240.0) -> None:
         """Send one of SETUP_SCRIPTS and wait until the printer says it is done. Raises RuntimeError."""
+        await self._call(GCODE, {"script": script}, timeout, "The printer did not finish the move in time.")
+
+    async def _call(self, method: str, params: dict, timeout: float, timeout_text: str) -> None:
         ws = self._ws
         if ws is None or not self.connected:
             raise RuntimeError("The printer is not connected.")
@@ -135,10 +150,10 @@ class MoonrakerClient:
         fut = asyncio.get_running_loop().create_future()
         self._pending[rid] = fut
         try:
-            await self._send(ws, rid, GCODE, {"script": script})
+            await self._send(ws, rid, method, params)
             reply = await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError:
-            raise RuntimeError("The printer did not finish the move in time.") from None
+            raise RuntimeError(timeout_text) from None
         finally:
             self._pending.pop(rid, None)
         if "error" in reply:

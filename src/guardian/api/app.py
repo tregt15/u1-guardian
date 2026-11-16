@@ -104,6 +104,16 @@ class MoveBody(BaseModel):
     plate_empty: bool = False
 
 
+class StartBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = False
+    plate_clear: bool = False
+    filename: str | None = Field(default=None, max_length=300)  # None means reprint the last file
+
+
+MAX_UPLOAD = 300 * 1024 * 1024
+
+
 class ControlBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     confirm: bool = False
@@ -360,6 +370,59 @@ def create_app(ctx: ApiContext) -> FastAPI:
             raise HTTPException(502, f"could not remove the model: {exc}") from exc
         await ai.refresh(force=True)
         return {"removed": model}
+
+    def _print_fn(key: str):
+        fn = ctx.extra.get(key)
+        if fn is None:
+            raise HTTPException(409, "printer controls are not available in this mode")
+        return fn
+
+    @app.get("/api/printer/files", dependencies=[Depends(auth)])
+    async def printer_files() -> dict:
+        """G-code files on the printer (read only)."""
+        try:
+            return {"files": await _print_fn("printer_files")()}
+        except ValueError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.post("/api/printer/start", dependencies=[Depends(auth)])
+    async def printer_start(body: StartBody) -> dict:
+        """Reprint (no filename) or print a file. Only runs after the page confirmed and the person said the plate is empty."""
+        fn = _print_fn("start_file")
+        if not body.confirm:
+            raise HTTPException(400, "confirm must be true")
+        try:
+            return await fn(body.filename, body.plate_clear)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/printer/files/upload", dependencies=[Depends(auth)])
+    async def printer_upload(request: Request, name: str, confirm: bool = False) -> dict:
+        """Send a G-code file (the request body) to the printer. It does not start a print."""
+        fn = _print_fn("upload_file")
+        if not confirm:
+            raise HTTPException(400, "confirm must be true")
+        size = 0
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".gcode") as tmp:
+            tmp_path = Path(tmp.name)
+            try:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_UPLOAD:
+                        raise HTTPException(413, "That file is too big (limit 300 MB).")
+                    tmp.write(chunk)
+            except HTTPException:
+                tmp.close()
+                tmp_path.unlink(missing_ok=True)
+                raise
+        try:
+            if size == 0:
+                raise HTTPException(400, "The file is empty.")
+            return await fn(name, tmp_path)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     @app.post("/api/printer/{action}", dependencies=[Depends(auth)])
     async def printer_control(action: Literal["pause", "resume", "cancel"], body: ControlBody) -> dict:

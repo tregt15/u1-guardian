@@ -52,6 +52,7 @@ class MockMoonraker:
         self.pauses: list[Any] = []
         self.controls: list[str] = []
         self.scripts_run: list[str] = []
+        self.starts: list[Any] = []
         self._server = None
 
     async def start(self) -> None:
@@ -89,6 +90,10 @@ class MockMoonraker:
                     continue
                 elif method in ("printer.print.resume", "printer.print.cancel"):
                     self.controls.append(method)
+                    await ws.send(json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": "ok"}))
+                    continue
+                elif method == "printer.print.start":
+                    self.starts.append(req.get("params"))
                     await ws.send(json.dumps({"jsonrpc": "2.0", "id": rpc_id, "result": "ok"}))
                     continue
                 elif method == "printer.print.pause":
