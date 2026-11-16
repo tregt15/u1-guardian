@@ -109,3 +109,47 @@ async def test_start_file_guards_state_plate_and_setting():
     assert await App.start_file(make("complete"), None, True) == {"started": "last.gcode"}
     assert await App.start_file(make("cancelled"), "x/b.gcode", True) == {"started": "x/b.gcode"}
     assert sent == ["last.gcode", "x/b.gcode"] and len(logged) == 2
+
+
+async def test_view_bed_runs_home_park_z5_only_when_idle_and_allowed():
+    from types import SimpleNamespace
+
+    from guardian.camera.setup_moves import HOME, PARK, Z5
+
+    moves, logged = [], []
+
+    async def setup_move(script):
+        moves.append(script)
+        if script == "FAIL":
+            raise RuntimeError("The printer refused: x")
+
+    def make(state, files=True, moves_on=True):
+        me = SimpleNamespace(cfg=SimpleNamespace(controls=SimpleNamespace(print_files=files, setup_moves=moves_on)),
+                             tracker=SimpleNamespace(print_state=state), client=SimpleNamespace(setup_move=setup_move),
+                             db=SimpleNamespace(log=lambda *a: logged.append(a)), _bed_view_busy=False,
+                             IDLE_STATES=App.IDLE_STATES)
+        me._check_can_start = lambda: App._check_can_start(me)
+        return me
+
+    for bad in (make("printing"), make("paused"), make("error"), make("complete", files=False), make("complete", moves_on=False)):
+        with pytest.raises(ValueError):
+            await App.view_bed(bad)
+    assert moves == []
+    ok = make("complete")
+    assert await App.view_bed(ok) == {"moved": True}
+    assert moves == [HOME, PARK, Z5] and ok._bed_view_busy is False
+
+
+def test_view_bed_api_needs_confirm(tmp_path):
+    env = make_env(tmp_path)
+    assert env.client.post("/api/printer/view-bed", json={"confirm": True}).status_code == 409  # no app here
+    calls = []
+
+    async def view_bed():
+        calls.append(1)
+        return {"moved": True}
+
+    env.ctx.extra["view_bed"] = view_bed
+    env.client = TestClient(create_app(env.ctx))
+    assert env.client.post("/api/printer/view-bed", json={}).status_code == 400
+    assert env.client.post("/api/printer/view-bed", json={"confirm": True}).json() == {"moved": True} and calls == [1]

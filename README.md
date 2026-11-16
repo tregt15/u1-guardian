@@ -113,7 +113,7 @@ type STOP, because a stopped print cannot be resumed. They use Moonraker's norma
 Guardian only resumes or stops a print when you click. Turn the buttons off on the Settings page if you like.
 
 When the printer is idle, the dashboard also has **Reprint last file**, **Print a file** and **Upload a file**. Each asks
-you to confirm and to tick that the plate is empty. Upload only sends the file. It does not start a print. These
+you to confirm and to tick that the plate is empty. The dialog shows the live camera and a button that raises the bed (home, back middle, 5 mm) so you can see the plate. Take a finished print off the plate first. Upload only sends the file. It does not start a print. These
 buttons never show during a print, and Guardian never starts a print by itself. Turn them off on the Settings page
 (Show Reprint, Print a file and Upload). UNVERIFIED on the real U1 until the first run: it uses Moonraker's normal
 `printer.print.start` and file upload.

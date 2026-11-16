@@ -385,6 +385,17 @@ def create_app(ctx: ApiContext) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(502, str(exc)) from exc
 
+    @app.post("/api/printer/view-bed", dependencies=[Depends(auth)])
+    async def printer_view_bed(body: ControlBody) -> dict:
+        """Raise the bed so the camera sees the plate (before a print). Takes about a minute."""
+        fn = _print_fn("view_bed")
+        if not body.confirm:
+            raise HTTPException(400, "confirm must be true")
+        try:
+            return await fn()
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.post("/api/printer/start", dependencies=[Depends(auth)])
     async def printer_start(body: StartBody) -> dict:
         """Reprint (no filename) or print a file. Only runs after the page confirmed and the person said the plate is empty."""

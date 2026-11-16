@@ -23,7 +23,7 @@ import uvicorn
 from guardian.ai.diagnosis import Diagnoser
 from guardian.ai.gcode_view import GcodeFollower, draw_top
 from guardian.camera.calibration import CameraSetup
-from guardian.camera.setup_moves import TOP_Z, SetupMover
+from guardian.camera.setup_moves import HOME, PARK, TOP_Z, Z5, SetupMover
 from guardian.camera.match import decode as decode_jpeg
 from guardian.camera.simulate import render as render_simulation
 from guardian.camera.match import score as match_score
@@ -161,6 +161,7 @@ class App:
                                                 "control": self.printer_control,
                                                 "printer_files": self.printer_files,
                                                 "start_file": self.start_file,
+                                                "view_bed": self.view_bed,
                                                 "upload_file": self.upload_file,
                                                 "latest_frame": self._latest_frame,
                                                 "set_ai_key": self.set_ai_key,
@@ -420,6 +421,7 @@ class App:
         return {"sent": action, "state_before": state}
 
     # ---- reprint, print a file, upload a file (owner asked, 2026-11-15) ----
+    _bed_view_busy = False
     IDLE_STATES = ("standby", "complete", "cancelled")
 
     @staticmethod
@@ -438,6 +440,28 @@ class App:
         state = self.tracker.print_state
         if state not in self.IDLE_STATES:
             raise ValueError(f"The printer is {state or 'not connected'}. It must be idle to start a print or send a file.")
+
+    async def view_bed(self) -> dict:
+        """Before a new print: home, park the toolhead at the back and raise the bed to Z 5, so the camera sees the whole
+        plate. The same three approved scripts as the camera setup. Saves no pictures. Only when idle. Raises ValueError."""
+        self._check_can_start()
+        if not self.cfg.controls.setup_moves:
+            raise ValueError("Bed moves are turned off in Settings (Let the camera setup move the bed).")
+        if self._bed_view_busy:
+            raise ValueError("The bed is already moving.")
+        self._bed_view_busy = True
+        try:
+            for script in (HOME, PARK, Z5):
+                try:
+                    await self.client.setup_move(script)
+                except RuntimeError as exc:
+                    raise ValueError(str(exc)) from exc
+                if self.tracker.print_state not in self.IDLE_STATES:
+                    raise ValueError("A print started, so Guardian stopped moving the bed.")
+        finally:
+            self._bed_view_busy = False
+        self.db.log("controls", "warning", "user asked to raise the bed to see the plate before a print", {})
+        return {"moved": True}
 
     def _files_url(self, tail: str) -> str:
         return f"http://{self.cfg.printer.host}:{self._printer_port}/server/files/{tail}"

@@ -144,9 +144,25 @@ function plateDialog(message, okText) {
   return new Promise((resolve) => {
     const box = el("input", { type: "checkbox", id: "plate-clear" });
     const okBtn = el("button", { type: "button", class: "btn btn-primary" }, okText);
-    const close = (v) => { dlg.close(); dlg.remove(); resolve(v); };
-    const dlg = el("dialog", { class: "g-dialog" },
-      el("p", {}, message),
+    const pic = el("img", { class: "live", alt: "Camera picture of the build plate", style: "width:100%;border-radius:8px;margin:8px 0" });
+    const note = el("p", { class: "small muted" }, "Raise the bed first, so you can see the plate in the picture.");
+    const moveBtn = el("button", { type: "button", class: "btn btn-secondary" }, "Raise the bed so I can see the plate");
+    const refresh = () => { pic.src = "/api/camera/latest?t=" + Date.now() + tokenQuery("&"); };
+    const timer = setInterval(refresh, 1500);
+    refresh();
+    const close = (v) => { clearInterval(timer); dlg.close(); dlg.remove(); resolve(v); };
+    moveBtn.addEventListener("click", async () => {
+      if (!await ask("Guardian will home the printer, move the toolhead to the back and raise the bed to 5 mm from the nozzles. "
+        + "If a finished print is still on the plate, take it off first, or it can hit the toolheads. Continue?", { ok: "Raise the bed" })) return;
+      moveBtn.disabled = true;
+      note.textContent = "Moving the bed. This takes about a minute...";
+      try {
+        await api("/api/printer/view-bed", { method: "POST", body: JSON.stringify({ confirm: true }) });
+        note.textContent = "The bed is up. Look at the picture. Is the plate empty?";
+      } catch (e) { note.textContent = "The bed did not move: " + e.message; moveBtn.disabled = false; }
+    });
+    const dlg = el("dialog", { class: "g-dialog", style: "max-width:560px" },
+      el("p", {}, message), pic, note, moveBtn,
       el("label", { class: "row", style: "gap:8px;margin:10px 0" }, box, el("span", {}, "The build plate is empty and clear.")),
       el("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
         el("button", { type: "button", class: "btn btn-secondary", onclick: () => close(false) }, "Cancel"), okBtn));
