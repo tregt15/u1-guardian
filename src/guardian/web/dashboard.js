@@ -191,11 +191,13 @@ function camAndSim(s) {
 }
 function simText(s) {
   const p = s.printer || {}, pf = s.print_file || {};
-  if (!pf.has_picture || !["printing", "paused"].includes(p.print_state))
-    return "What the camera should see with nothing on the plate, at the bed height the printer is at now. It is built on a photo of the empty plate, so the toolheads in it do not move.";
-  return "Simulation from the print file" + (p.print_progress != null ? ", " + Math.round(p.print_progress) + "% done" : "") +
-    (pf.max_z_mm ? ", " + pf.max_z_mm + " mm tall so far" : "") + ". It is drawn from the camera's point of view, so it should look like the live picture. " +
-    "It is built on a photo of the empty plate, so the toolheads in it do not move. Small edge differences are normal.";
+  const model = "It is a 3D model of the printer, drawn the way the camera sees it. The cables and what is in the bin are not live. Small edge differences are normal.";
+  if (pf.has_picture && ["printing", "paused"].includes(p.print_state))
+    return "Simulation from the print file" + (p.print_progress != null ? ", " + Math.round(p.print_progress) + "% done" : "") +
+      (pf.max_z_mm ? ", " + pf.max_z_mm + " mm tall so far" : "") + ". " + model;
+  if (pf.has_picture)
+    return "The last print (" + (pf.max_z_mm || "?") + " mm tall) is drawn on the plate, because Guardian cannot tell when you take it off. " + model;
+  return "What the camera should see with nothing on the plate, at the bed height the printer is at now. " + model;
 }
 function palette(s) {  // the print's filament colors, from the print file
   const pal = ((s.print_file || {}).palette) || [];
@@ -209,7 +211,7 @@ function palette(s) {  // the print's filament colors, from the print file
 let expImg = null, expAt = 0, expFold = null, expNote = null;
 function expectedBox(s) {
   const pf = s.print_file || {};
-  if (!pf.has_picture || !["printing", "paused"].includes((s.printer || {}).print_state)) { expImg = null; expFold = null; return null; }
+  if (!pf.has_picture || !["printing", "paused", "complete", "cancelled"].includes((s.printer || {}).print_state)) { expImg = null; expFold = null; return null; }
   if (!expFold) {
     expImg = el("img", { class: "live", alt: "Drawing of the plate from the print file" });
     expNote = el("p", { class: "tiny muted", style: "margin-top:8px" });

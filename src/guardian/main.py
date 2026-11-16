@@ -26,7 +26,6 @@ from guardian.ai.gcode_view import GcodeFollower, draw_top
 from guardian.camera.calibration import CameraSetup
 from guardian.camera.setup_moves import HOME, PARK, TOP_Z, Z5, SetupMover
 from guardian.camera.match import decode as decode_jpeg
-from guardian.camera.simulate import decode as decode_reference
 from guardian.camera.simulate import render as render_simulation
 from guardian.camera.match import score as match_score
 from guardian.ai.installer import OllamaInstaller
@@ -274,6 +273,8 @@ class App:
         st = self.tracker.status
         name = st.get("print_stats", {}).get("filename")
         pos = st.get("virtual_sdcard", {}).get("file_position")
+        if self.tracker.print_state == "complete" and self._file_meta.get("filename") == name:
+            pos = self._file_meta.get("size")  # a finished print is still on the plate: read the file to the end
         if not name or not isinstance(pos, int):
             return
 
@@ -387,27 +388,16 @@ class App:
     async def _simulated_async(self) -> bytes | None:
         return await asyncio.to_thread(self.simulated_picture)
 
-    def _reference(self) -> tuple[bytes, float] | None:
-        """The photo the simulated picture is built on: the lowest camera setup picture (the empty plate, bed near the
-        nozzles). Read once and kept. None if there is none, and then a plain drawing is used."""
-        best = None
-        for meta in self.frames_dir.glob("setup_*.json") if self.frames_dir.is_dir() else []:
-            try:
-                z = float(json.loads(meta.read_text(encoding="utf-8")).get("bed_z"))
-            except (OSError, ValueError, TypeError):
-                continue
-            jpg = meta.with_suffix(".jpg")
-            if jpg.is_file() and (best is None or z < best[0]):
-                best = (z, jpg)
-        if best is None:
+    def _tool_on_carriage(self) -> int | None:
+        """The toolhead number (0 to 3) that is on the carriage, so its dock is drawn empty. Only during a print: when the
+        printer is idle every toolhead is in its dock. UNVERIFIED: that dock number equals the extruder number."""
+        if self.tracker.print_state not in ("printing", "paused"):
             return None
-        key = (best[1].name, best[1].stat().st_mtime)
-        if self._reference_cache and self._reference_cache[0] == key:
-            return self._reference_cache[1]
-        rgb = decode_reference(self.ffmpeg, best[1].read_bytes())
-        ref = (rgb, best[0]) if rgb else None
-        self._reference_cache = (key, ref)
-        return ref
+        name = str(self.tracker.status.get("toolhead", {}).get("extruder") or "")
+        digits = name[len("extruder"):] if name.startswith("extruder") else ""
+        if name == "extruder":
+            return 0
+        return int(digits) if digits.isdigit() and int(digits) < 4 else None
 
     def simulated_picture(self) -> bytes | None:
         """What the camera should see now (PNG), drawn from the print file through the camera setup. None if not set up."""
@@ -424,8 +414,10 @@ class App:
                 blocks = plate.blocks(cell)
                 if len(blocks) <= 30000:
                     break
+        pos = self.tracker.status.get("toolhead", {}).get("position") or []
+        xy = (float(pos[0]), float(pos[1])) if len(pos) > 1 and all(isinstance(v, (int, float)) for v in pos[:2]) else None
         return render_simulation(self.camera_setup, blocks, z, colors, cell_mm=cell, max_z=plate.max_z if have else 0.0,
-                                 reference=self._reference())
+                                 carriage_xy=xy, away=self._tool_on_carriage())
 
     async def _refresh_file_meta(self) -> None:
         """Read the print file's info (height, layers, colors) once per print. Read only."""
@@ -443,6 +435,7 @@ class App:
             return
         hexes = [h.strip() for h in str(m.get("filament_colour") or "").split(";") if h.strip()]
         self._file_meta = {"filename": name, "object_height": m.get("object_height"), "layer_count": m.get("layer_count"),
+                           "size": m.get("size"),
                            "colors": [color_name(h) for h in hexes], "hex": hexes}
 
     async def printer_control(self, action: str) -> dict:
@@ -465,7 +458,6 @@ class App:
 
     # ---- reprint, print a file, upload a file (owner asked, 2026-11-15) ----
     _bed_view_busy = False
-    _reference_cache: tuple | None = None
     IDLE_STATES = ("standby", "complete", "cancelled")
 
     @staticmethod
@@ -784,6 +776,9 @@ class App:
             except Exception:  # noqa: BLE001
                 log.exception("auto pause tick failed")
             try:
+                if self.tracker.print_state == "complete":
+                    await self._refresh_file_meta()
+                    self._follow_gcode()
                 if self.tracker.print_state in ("printing", "paused"):
                     await self._refresh_file_meta()
                     self._follow_gcode()

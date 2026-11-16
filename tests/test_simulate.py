@@ -3,7 +3,7 @@
 import zlib
 
 from guardian.ai.gcode_view import PlateMap
-from guardian.camera import simulate
+from guardian.camera import calibration, scene3d, simulate
 from guardian.camera.calibration import CORNERS, CameraSetup, project
 
 # The same made-up camera as test_calibration, in full size (1920 wide) picture pixels.
@@ -23,7 +23,7 @@ def setup_for(tmp_path):
 
 def pixels(data: bytes):
     """Decode our own PNG (filter 0 rows, 8 bit RGB) into rows of bytes."""
-    assert data.startswith(b"\x89PNG")
+    assert data.startswith(bytes([137]) + b"PNG")
     i, idat = 8, b""
     while i < len(data):
         n = int.from_bytes(data[i:i + 4], "big")
@@ -44,6 +44,12 @@ def test_not_set_up_gives_nothing(tmp_path):
     assert simulate.render(CameraSetup(tmp_path), [], 5.0, []) is None
 
 
+def test_a_shipped_default_setup_makes_a_picture_without_any_clicks(tmp_path, shipped_camera_setup):
+    s = CameraSetup(tmp_path)
+    assert s.ready and s.using_default
+    assert simulate.render(s, [], 5.0, []).startswith(bytes([137]) + b"PNG")
+
+
 def test_camera_centre_is_where_the_matrix_sees_nothing():
     c = simulate.camera_centre(P_TRUE)
     assert all(abs(sum(r[i] * c[i] for i in range(3)) + r[3]) < 1e-6 for r in P_TRUE)
@@ -58,7 +64,7 @@ def test_a_printed_block_is_drawn_in_its_color_where_the_camera_would_see_it(tmp
     assert r > 150 and g < 30 and b < 30  # filament red, top face
     empty = pixels(simulate.render(s, [], 0.0, []))
     u0, v0 = project(s.data["P"], 136.5, 136.5, 0.0)  # the plate under the block
-    assert px(empty, u0 * 0.5, v0 * 0.5) == simulate.PLATE  # without the block, bare plate
+    assert px(empty, u0 * 0.5, v0 * 0.5) == scene3d.PLATE  # without the block, bare plate
 
 
 def test_the_plate_moves_with_the_bed(tmp_path):
@@ -75,7 +81,7 @@ def test_plate_map_blocks_keep_the_tallest_cell_and_its_tool():
     assert sorted(plate.blocks()) == [(3, 3, 8.0, 0), (4, 3, 4.2, 1)]
 
 
-def test_the_lens_bend_moves_the_picture_and_the_backdrop_is_drawn(tmp_path):
+def test_the_lens_bend_moves_the_picture_and_the_plate_is_drawn(tmp_path):
     s = setup_for(tmp_path)
     flat = simulate.render(s, [], 5.0, [])
     s.set_lens(0.4)
@@ -83,21 +89,35 @@ def test_the_lens_bend_moves_the_picture_and_the_backdrop_is_drawn(tmp_path):
     assert flat != bent
     rows = pixels(bent)
     colors = {px(rows, x, y) for x in range(0, simulate.W, 8) for y in range(0, simulate.H, 8)}
-    assert simulate.PLATE in colors and (56, 58, 65) in colors  # the plate, and the centre panel of the backdrop
+    assert scene3d.PLATE in colors
 
 
-def test_reference_photo_is_the_backdrop_and_the_bed_slides_with_its_height(tmp_path):
-    s = setup_for(tmp_path)
-    ref = bytes([200, 120, 40]) * (simulate.W * simulate.H)  # a flat orange "photo"
-    same = simulate.render(s, [], 5.0, [], reference=(ref, 5.0))
-    rows = pixels(same)
-    assert px(rows, 5, 5) == (200, 120, 40)  # the photo shows through, nothing is drawn over it at the same bed height
-    lower = simulate.render(s, [], 40.0, [], reference=(ref, 5.0))
-    assert lower != same  # the bed moved, so the old bed area went dark and the plate is filled from the photo
-    rows = pixels(lower)
-    flat = {px(rows, x, y) for x in range(0, simulate.W, 16) for y in range(0, simulate.H, 16)}
-    assert simulate.DARK in flat and (200, 120, 40) in flat
-    assert simulate.render(s, [], 5.0, [], reference=(b"short", 5.0)) is not None  # a bad photo falls back to the drawing
+def test_the_3d_scene_draws_the_interior_under_a_lowered_bed(tmp_path, shipped_camera_setup):
+    """Bug seen 2026-11-16: with the bed lowered, the old picture painted a dark patch where the bed had been. Now the wall,
+    the fan and the dock are there, and a tall print still pokes up into the picture."""
+    s = CameraSetup(tmp_path)  # the shipped default setup
+    assert s.ready
+    empty = pixels(simulate.render(s, [], 200.0, []))
+    colors = {px(empty, x, y) for x in range(0, simulate.W, 6) for y in range(0, simulate.H, 6)}
+    assert len(colors) > 60  # a model with many shapes, not flat patches
+    dark = sum(1 for x in range(0, simulate.W, 6) for y in range(0, simulate.H, 6) if px(empty, x, y) == (14, 15, 18))
+    assert dark < 50
+    blocks = [(45, 45, 195.0, 1)]  # a 3 mm column in the middle of the plate, 195 mm tall, tool 1
+    rows = pixels(simulate.render(s, blocks, 200.0, ["#000000", "#ff0000"]))
+    view = scene3d.View(s)
+    cx, cy = view.to_corner(136.5, 136.5)
+    u, v = view.px(cx, cy, 195.0 - 200.0)  # the top of the column
+    assert v < simulate.H  # it is inside the picture
+    r, g, b = px(rows, u, v)
+    assert r > 150 and g < 40 and b < 40
+
+
+def test_the_carriage_and_its_empty_dock(tmp_path, shipped_camera_setup):
+    s = CameraSetup(tmp_path)
+    parked = simulate.render(s, [], 5.0, [], carriage_xy=(5.0, 5.0))
+    working = simulate.render(s, [], 5.0, [], carriage_xy=(135.0, 250.0), away=1)
+    docked_all = simulate.render(s, [], 5.0, [], carriage_xy=(135.0, 250.0), away=None)
+    assert len({parked, working, docked_all}) == 3  # parked, at work with one head out of its dock, and at work with none out
 
 
 def test_print_palette_lists_the_used_tools_with_color_words():
