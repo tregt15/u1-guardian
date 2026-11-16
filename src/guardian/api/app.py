@@ -109,6 +109,7 @@ class StartBody(BaseModel):
     confirm: bool = False
     plate_clear: bool = False
     filename: str | None = Field(default=None, max_length=300)  # None means reprint the last file
+    override: bool = False  # start although the plate check saw something (only if the person looked and says it is fine)
 
 
 MAX_UPLOAD = 300 * 1024 * 1024
@@ -403,9 +404,17 @@ def create_app(ctx: ApiContext) -> FastAPI:
         if not body.confirm:
             raise HTTPException(400, "confirm must be true")
         try:
-            return await fn(body.filename, body.plate_clear)
+            return await fn(body.filename, body.plate_clear, body.override)
         except ValueError as exc:
+            check = getattr(exc, "check", None)
+            if check:  # the plate check stopped it: send the result too, so the page can show it
+                raise HTTPException(409, {"message": str(exc), "check": check}) from exc
             raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/printer/check-plate", dependencies=[Depends(auth)])
+    async def printer_check_plate() -> dict:
+        """Look at the build plate with the AI (read only). The bed must be raised so the camera sees the plate."""
+        return await _print_fn("check_plate")()
 
     @app.post("/api/printer/files/upload", dependencies=[Depends(auth)])
     async def printer_upload(request: Request, name: str, confirm: bool = False) -> dict:

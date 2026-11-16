@@ -278,6 +278,10 @@ class VisionWatcher:
             self._remember(kind, None, f"AI error: {exc}")
             return None
 
+    async def look_at_plate(self, frame: bytes) -> dict | None:
+        """One look at a camera picture with the plate question (used before a print is started). None if the AI failed."""
+        return await self._ask("bed", frame)
+
     async def _bed_check(self) -> None:
         first = await self._frame()
         if first is None:

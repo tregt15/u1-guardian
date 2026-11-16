@@ -275,6 +275,9 @@ class ControlsConfig(_Section):
     # Reprint, print a file and upload a file from the dashboard (owner asked, 2026-11-15). Only when idle, and only after
     # a person clicks, confirms and says the plate is empty. Guardian never starts a print by itself.
     print_files: bool = True
+    # Before the start command, Guardian looks at the plate with the AI and refuses to start if something is on it or if
+    # it cannot tell (owner asked, 2026-11-16). Read only. Turn it off only if you check the plate yourself.
+    plate_check: bool = True
 
 
 class Config(_Section):

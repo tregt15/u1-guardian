@@ -147,6 +147,7 @@ function plateDialog(message, okText) {
     const pic = el("img", { class: "live", alt: "Camera picture of the build plate", style: "width:100%;border-radius:8px;margin:8px 0" });
     const note = el("p", { class: "small muted" }, "Raise the bed first, so you can see the plate in the picture.");
     const moveBtn = el("button", { type: "button", class: "btn btn-secondary" }, "Raise the bed so I can see the plate");
+    const checkBtn = el("button", { type: "button", class: "btn btn-secondary" }, "Check the plate now");
     const refresh = () => { pic.src = "/api/camera/latest?t=" + Date.now() + tokenQuery("&"); };
     const timer = setInterval(refresh, 1500);
     refresh();
@@ -161,8 +162,16 @@ function plateDialog(message, okText) {
         note.textContent = "The bed is up. Look at the picture. Is the plate empty?";
       } catch (e) { note.textContent = "The bed did not move: " + e.message; moveBtn.disabled = false; }
     });
+    checkBtn.addEventListener("click", async () => {  // the same AI look Guardian does before it sends the start command
+      checkBtn.disabled = true;
+      note.textContent = "Looking at the plate. This can take a little while...";
+      try { note.textContent = (await api("/api/printer/check-plate", { method: "POST" })).message; }
+      catch (e) { note.textContent = "Could not check: " + e.message; }
+      checkBtn.disabled = false;
+    });
     const dlg = el("dialog", { class: "g-dialog", style: "max-width:560px" },
-      el("p", {}, message), pic, note, moveBtn,
+      el("p", {}, message), pic, note, el("div", { class: "row", style: "gap:8px;flex-wrap:wrap" }, moveBtn, checkBtn),
+      el("p", { class: "tiny muted" }, "Before it sends the start command, Guardian also looks at the plate with the AI and will not start if it sees something on it or cannot see it."),
       el("label", { class: "row", style: "gap:8px;margin:10px 0" }, box, el("span", {}, "The build plate is empty and clear.")),
       el("div", { class: "row", style: "justify-content:flex-end;margin-top:14px" },
         el("button", { type: "button", class: "btn btn-secondary", onclick: () => close(false) }, "Cancel"), okBtn));
@@ -174,14 +183,26 @@ function plateDialog(message, okText) {
   });
 }
 
-async function startPrint(filename) {
+async function startPrint(filename, override) {
   const what = filename ? filename : "the last file again";
-  if (!await plateDialog("Start printing " + what + "? Look at the printer first.", "Start print")) return false;
+  if (!override && !await plateDialog("Start printing " + what + "? Look at the printer first.", "Start print")) return false;
+  if (!override) toast("Checking the plate before the start command...", "t-info");
   try {
-    const r = await api("/api/printer/start", { method: "POST", body: JSON.stringify({ confirm: true, plate_clear: true, filename: filename || null }) });
+    const r = await api("/api/printer/start", { method: "POST", body: JSON.stringify({ confirm: true, plate_clear: true, filename: filename || null, override: !!override }) });
     toast("Start sent to the printer: " + r.started, "t-ok");
     return true;
-  } catch (e) { toast("Not started: " + e.message, "t-crit"); return false; }
+  } catch (e) {
+    let info = null;
+    try { info = JSON.parse(e.message); } catch (x) { /* a plain message */ }
+    if (info && info.check) {  // the plate check stopped it. Nothing was sent to the printer.
+      if (info.check.state === "not_clear" && await ask("Guardian did not start the print. " + info.message +
+        " If you have looked and the plate really is clear, you can start anyway. Print anyway?", { ok: "Print anyway" })) return startPrint(filename, true);
+      if (info.check.state !== "not_clear") toast("Not started. " + info.message, "t-crit");
+      return false;
+    }
+    toast("Not started: " + e.message, "t-crit");
+    return false;
+  }
 }
 
 async function pickPrintFile() {

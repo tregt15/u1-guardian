@@ -73,6 +73,14 @@ class _Server(uvicorn.Server):
         pass
 
 
+class PlateCheckFailed(ValueError):
+    """The plate check did not say clear. `check` is the result (state, message). Nothing was sent to the printer."""
+
+    def __init__(self, check: dict) -> None:
+        super().__init__(check.get("message", "The plate check did not pass."))
+        self.check = check
+
+
 class App:
     def __init__(self, cfg: Config, clock: Clock | None = None, *, realtime_standin: bool = True,
                  printer_port: int | None = None) -> None:
@@ -165,6 +173,7 @@ class App:
                                                 "printer_files": self.printer_files,
                                                 "start_file": self.start_file,
                                                 "view_bed": self.view_bed,
+                                                "check_plate": self.check_plate,
                                                 "upload_file": self.upload_file,
                                                 "latest_frame": self._latest_frame,
                                                 "set_ai_key": self.set_ai_key,
@@ -516,7 +525,53 @@ class App:
         out.sort(key=lambda f: f["modified"] or 0, reverse=True)
         return out[:200]
 
-    async def start_file(self, filename: str | None, plate_clear: bool) -> dict:
+    PLATE_VISIBLE_Z = 60.0  # the camera sees the plate when the bed is raised to about this Z or less (setup pictures go to 50)
+
+    async def check_plate(self) -> dict:
+        """Look at the build plate with the AI before a print starts. Read only: it uses the camera picture and the AI.
+        Returns {"state": "clear" | "not_clear" | "cannot_check", "message", ...}. It only says clear when two looks, a
+        couple of seconds apart, both say the plate is clear with enough confidence. UNVERIFIED on the real U1."""
+        from guardian.ai.vision import _bool, _conf
+
+        def out(state: str, message: str, **extra) -> dict:
+            return {"state": state, "message": message, **extra}
+
+        z = self._bed_z()
+        if z is None or z > self.PLATE_VISIBLE_Z:
+            return out("cannot_check", "The bed is lowered, so the camera cannot see the plate. Use \"Raise the bed so I can see "
+                       "the plate\" first, then check again.")
+        if not self.ai.usable:
+            return out("cannot_check", "The plate check needs the AI. Turn it on in Settings (AI), then try again.")
+        looks = []
+        for n in range(2):
+            frame = await self._fresh_frame()
+            if frame is None:
+                return out("cannot_check", "There is no fresh camera picture right now.")
+            try:
+                a = await self.vision.look_at_plate(frame)
+            except Exception as exc:  # noqa: BLE001 - any AI failure means no verdict
+                log.info("plate check failed: %s", exc)
+                a = None
+            if a is None:
+                return out("cannot_check", "The AI did not give an answer.")
+            looks.append(a)
+            if n == 0:
+                await asyncio.sleep(2.0)
+        minc = self.cfg.ai.min_confidence
+        seen = [a for a in looks if _bool(a.get("plate_visible")) is not False]
+        if len(seen) < len(looks):
+            return out("cannot_check", "The AI could not see the build plate in the picture.", description=looks[-1].get("description"))
+        for a in looks:
+            if _bool(a.get("clear")) is False and _conf(a.get("confidence")) >= minc:
+                objs = a.get("objects") if isinstance(a.get("objects"), list) else []
+                what = ", ".join(str(o) for o in objs[:5])
+                return out("not_clear", "The AI sees something on the plate" + (f" ({what})" if what else "") + ": "
+                           + str(a.get("description") or ""), description=a.get("description"), objects=objs)
+        if all(_bool(a.get("clear")) is True and _conf(a.get("confidence")) >= minc for a in looks):
+            return out("clear", "The AI looked twice and the plate looks clear.", description=looks[-1].get("description"))
+        return out("cannot_check", "The AI was not sure about the plate.", description=looks[-1].get("description"))
+
+    async def start_file(self, filename: str | None, plate_clear: bool, override: bool = False) -> dict:
         """Start a print. filename None means reprint the last file. A person clicked, confirmed and said the plate is empty."""
         self._check_can_start()
         if not plate_clear:
@@ -525,6 +580,12 @@ class App:
         if not name:
             raise ValueError("There is no last file to reprint.")
         name = self.clean_gcode_name(name)
+        if self.cfg.controls.plate_check:
+            check = await self.check_plate()
+            if check["state"] == "not_clear" and override:
+                self.db.log("controls", "warning", "user started a print although the plate check saw something", check)
+            elif check["state"] != "clear":
+                raise PlateCheckFailed(check)
         try:
             await self.client.start_print(name)
         except RuntimeError as exc:
