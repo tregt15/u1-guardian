@@ -182,8 +182,9 @@ ReportFn = Callable[..., Awaitable[Any]]
 # the dashboard. It does not raise an incident or pause a print. (A 7B model said "fine" on the top down drawing even with
 # 7 of 8 parts missing, so how well this works on the real U1 is UNVERIFIED.)
 COMPARE_PROMPT = ("Picture 1 is a real photo from the camera inside a 3D printer. Picture 2 is a computer drawing of what the same "
-                  "camera should see right now, made from the print file. It is from the same viewpoint. The drawing has plain "
-                  "colors, no shadows and no toolheads, and its edges can be a little off.\n"
+                  "camera should see right now, made from the print file. It is from the same viewpoint. It is built on an older "
+                  "photo of the empty plate with the print so far drawn on it in plain colors. The toolheads, gantry and wires "
+                  "in it are from that older photo, so they can be in other places. Its edges can be a little off.\n"
                   "Compare them on the build plate only. List what is different: a part that is in the drawing but missing or "
                   "fallen in the photo, plastic in the photo where the drawing is empty (loose strands, a lump, a part that moved), "
                   "or a part that is a very different size or shape. Ignore the toolheads, docks, purge bin, small color or edge "

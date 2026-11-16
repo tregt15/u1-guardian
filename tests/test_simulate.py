@@ -84,3 +84,17 @@ def test_the_lens_bend_moves_the_picture_and_the_backdrop_is_drawn(tmp_path):
     rows = pixels(bent)
     colors = {px(rows, x, y) for x in range(0, simulate.W, 8) for y in range(0, simulate.H, 8)}
     assert simulate.PLATE in colors and (56, 58, 65) in colors  # the plate, and the centre panel of the backdrop
+
+
+def test_reference_photo_is_the_backdrop_and_the_bed_slides_with_its_height(tmp_path):
+    s = setup_for(tmp_path)
+    ref = bytes([200, 120, 40]) * (simulate.W * simulate.H)  # a flat orange "photo"
+    same = simulate.render(s, [], 5.0, [], reference=(ref, 5.0))
+    rows = pixels(same)
+    assert px(rows, 5, 5) == (200, 120, 40)  # the photo shows through, nothing is drawn over it at the same bed height
+    lower = simulate.render(s, [], 40.0, [], reference=(ref, 5.0))
+    assert lower != same  # the bed moved, so the old bed area went dark and the plate is filled from the photo
+    rows = pixels(lower)
+    flat = {px(rows, x, y) for x in range(0, simulate.W, 16) for y in range(0, simulate.H, 16)}
+    assert simulate.DARK in flat and (200, 120, 40) in flat
+    assert simulate.render(s, [], 5.0, [], reference=(b"short", 5.0)) is not None  # a bad photo falls back to the drawing

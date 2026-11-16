@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import json
 import logging
 import signal
 import sys
@@ -25,6 +26,7 @@ from guardian.ai.gcode_view import GcodeFollower, draw_top
 from guardian.camera.calibration import CameraSetup
 from guardian.camera.setup_moves import HOME, PARK, TOP_Z, Z5, SetupMover
 from guardian.camera.match import decode as decode_jpeg
+from guardian.camera.simulate import decode as decode_reference
 from guardian.camera.simulate import render as render_simulation
 from guardian.camera.match import score as match_score
 from guardian.ai.installer import OllamaInstaller
@@ -373,6 +375,28 @@ class App:
     async def _simulated_async(self) -> bytes | None:
         return await asyncio.to_thread(self.simulated_picture)
 
+    def _reference(self) -> tuple[bytes, float] | None:
+        """The photo the simulated picture is built on: the lowest camera setup picture (the empty plate, bed near the
+        nozzles). Read once and kept. None if there is none, and then a plain drawing is used."""
+        best = None
+        for meta in self.frames_dir.glob("setup_*.json") if self.frames_dir.is_dir() else []:
+            try:
+                z = float(json.loads(meta.read_text(encoding="utf-8")).get("bed_z"))
+            except (OSError, ValueError, TypeError):
+                continue
+            jpg = meta.with_suffix(".jpg")
+            if jpg.is_file() and (best is None or z < best[0]):
+                best = (z, jpg)
+        if best is None:
+            return None
+        key = (best[1].name, best[1].stat().st_mtime)
+        if self._reference_cache and self._reference_cache[0] == key:
+            return self._reference_cache[1]
+        rgb = decode_reference(self.ffmpeg, best[1].read_bytes())
+        ref = (rgb, best[0]) if rgb else None
+        self._reference_cache = (key, ref)
+        return ref
+
     def simulated_picture(self) -> bytes | None:
         """What the camera should see now (PNG), drawn from the print file through the camera setup. None if not set up."""
         name = self.tracker.status.get("print_stats", {}).get("filename")
@@ -382,7 +406,8 @@ class App:
         plate = self.gcode.plate
         have = bool(name and self.gcode.filename == name and plate.max_z)
         colors = self._file_meta.get("hex") or [] if self._file_meta.get("filename") == name else []
-        return render_simulation(self.camera_setup, plate.blocks() if have else [], z, colors, max_z=plate.max_z if have else 0.0)
+        return render_simulation(self.camera_setup, plate.blocks() if have else [], z, colors, max_z=plate.max_z if have else 0.0,
+                                 reference=self._reference())
 
     async def _refresh_file_meta(self) -> None:
         """Read the print file's info (height, layers, colors) once per print. Read only."""
@@ -422,6 +447,7 @@ class App:
 
     # ---- reprint, print a file, upload a file (owner asked, 2026-11-15) ----
     _bed_view_busy = False
+    _reference_cache: tuple | None = None
     IDLE_STATES = ("standby", "complete", "cancelled")
 
     @staticmethod

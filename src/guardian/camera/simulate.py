@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 
 from guardian.ai.gcode_view import hex_rgb, png
-from guardian.camera.calibration import PLATE_MM, CameraSetup, distort, orient
+from guardian.camera.calibration import PLATE_MM, CameraSetup, distort, orient, undistort
 
 W, H = 960, 540
 SRC_W = 1920  # the clicks in the camera setup are in full size (1920 wide) picture pixels
@@ -47,11 +47,10 @@ def camera_centre(p: list[list[float]]) -> tuple[float, float, float] | None:
     return out[0], out[1], out[2]
 
 
-def _fill(rgb: bytearray, pts: list[tuple[float, float]], color: tuple[int, int, int]) -> None:
-    """Fill a polygon (scanline, even odd rule). Points are (x, y) in W x H pixels."""
+def _spans(pts: list[tuple[float, float]]):
+    """The rows of a polygon (scanline, even odd rule) as (y, first x, last x). Points are (x, y) in W x H pixels."""
     y0, y1 = max(0, int(math.floor(min(p[1] for p in pts)))), min(H - 1, int(math.ceil(max(p[1] for p in pts))))
     n = len(pts)
-    px = bytes(color)
     for y in range(y0, y1 + 1):
         yc = y + 0.5
         xs = []
@@ -64,7 +63,13 @@ def _fill(rgb: bytearray, pts: list[tuple[float, float]], color: tuple[int, int,
         for i in range(0, len(xs) - 1, 2):
             a, b = max(0, int(math.floor(xs[i] - 0.5))), min(W - 1, int(math.ceil(xs[i + 1] - 0.5)))
             if b >= a:
-                rgb[(y * W + a) * 3:(y * W + b + 1) * 3] = px * (b - a + 1)
+                yield y, a, b
+
+
+def _fill(rgb: bytearray, pts: list[tuple[float, float]], color: tuple[int, int, int]) -> None:
+    px = bytes(color)
+    for y, a, b in _spans(pts):
+        rgb[(y * W + a) * 3:(y * W + b + 1) * 3] = px * (b - a + 1)
 
 
 def _line(rgb: bytearray, a: tuple[float, float], b: tuple[float, float], color: tuple[int, int, int]) -> None:
@@ -117,9 +122,119 @@ def _backdrop(rgb: bytearray) -> None:
         _fill(rgb, [(x * k, y * k) for x, y in pts], color)
 
 
+RIM_MM = 22.0  # the bed's white side edge, seen below the plate top. Moves with the bed.
+DARK = (14, 15, 18)
+NODE = 8  # the picture warp is worked out every 8 pixels and filled in between
+_warp_cache: dict = {}
+
+
+def _hull(pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    pts = sorted(set(pts))
+    if len(pts) < 3:
+        return pts
+
+    def half(seq):
+        h: list[tuple[float, float]] = []
+        for q in seq:
+            while len(h) >= 2 and (h[-1][0] - h[-2][0]) * (q[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0]) <= 0:
+                h.pop()
+            h.append(q)
+        return h
+
+    lo, up = half(pts), half(reversed(pts))
+    return lo[:-1] + up[:-1]
+
+
+def decode(ffmpeg: str, jpeg: bytes) -> bytes | None:
+    """A JPEG as W x H RGB bytes (FFmpeg), or None."""
+    import subprocess
+    try:
+        r = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vf", f"scale={W}:{H}",
+                            "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], input=jpeg, capture_output=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 and len(r.stdout) == W * H * 3 else None
+
+
+def _plane(p: list[list[float]], z0: float) -> list[list[float]]:
+    return [[p[i][0], p[i][1], p[i][2] * z0 + p[i][3]] for i in range(3)]
+
+
+def _inv3(m: list[list[float]]) -> list[list[float]] | None:
+    a, b, c = m[0]
+    d, e, f = m[1]
+    g, h, i = m[2]
+    det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+    if not math.isfinite(det) or abs(det) < 1e-12:
+        return None
+    return [[(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+            [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+            [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det]]
+
+
+def _bed_background(setup: CameraSetup, reference: tuple[bytes, float], bed_z: float,
+                    bed_region) -> bytearray:
+    """The reference photo (the empty plate, bed at ref_z) with the bed slid to where it is now (bed_z).
+    The photo is worked as a flat plate: each new pixel on the plate is looked up in the photo through the camera fit.
+    The old bed area is painted dark first (what is behind the bed is not known)."""
+    ref, ref_z = reference
+    if len(ref) != W * H * 3:
+        return bytearray(ref)
+    p = setup.data["P"]
+    k1, k = setup.lens, W / SRC_W
+    key = (id(ref), round(bed_z * 5), repr(p), k1)
+    hit = _warp_cache.get(key)
+    if hit is not None:
+        return bytearray(hit)
+    out = bytearray(ref)
+    if abs(bed_z - ref_z) >= 0.2:
+        old, new = bed_region(ref_z), bed_region(bed_z)
+        inv = _inv3(_plane(p, -bed_z))
+        a_ref = _plane(p, -ref_z)
+        if old:
+            _fill(out, old, DARK)
+        if new and inv:
+            def src(gx: float, gy: float) -> tuple[float, float] | None:
+                uu, vv = undistort(gx / k, gy / k, k1)
+                x, y, c = (inv[0][0] * uu + inv[0][1] * vv + inv[0][2], inv[1][0] * uu + inv[1][1] * vv + inv[1][2],
+                           inv[2][0] * uu + inv[2][1] * vv + inv[2][2])
+                if abs(c) < 1e-12:
+                    return None
+                x, y = x / c, y / c
+                a, b, w = (a_ref[0][0] * x + a_ref[0][1] * y + a_ref[0][2], a_ref[1][0] * x + a_ref[1][1] * y + a_ref[1][2],
+                           a_ref[2][0] * x + a_ref[2][1] * y + a_ref[2][2])
+                if w <= 1e-9:
+                    return None
+                u2, v2 = distort(a / w, b / w, k1)
+                return u2 * k, v2 * k
+
+            cols = W // NODE + 2
+            nodes = [[src(i * NODE, j * NODE) for i in range(cols)] for j in range(H // NODE + 2)]
+            for y, a, b in _spans(new):
+                j, t = divmod(y, NODE)
+                t /= NODE
+                row0, row1 = nodes[j], nodes[j + 1]
+                for x in range(a, b + 1):
+                    i, s = divmod(x, NODE)
+                    s /= NODE
+                    q = (row0[i], row0[i + 1], row1[i], row1[i + 1])
+                    if None in q:
+                        continue
+                    sx = (q[0][0] * (1 - s) + q[1][0] * s) * (1 - t) + (q[2][0] * (1 - s) + q[3][0] * s) * t
+                    sy = (q[0][1] * (1 - s) + q[1][1] * s) * (1 - t) + (q[2][1] * (1 - s) + q[3][1] * s) * t
+                    ix, iy = min(W - 1, max(0, int(sx + 0.5))), min(H - 1, max(0, int(sy + 0.5)))  # past the edge: the edge pixel
+                    out[(y * W + x) * 3:(y * W + x) * 3 + 3] = ref[(iy * W + ix) * 3:(iy * W + ix) * 3 + 3]
+    if len(_warp_cache) > 6:
+        _warp_cache.clear()
+    _warp_cache[key] = bytes(out)
+    return out
+
+
 def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z: float, colors: list[str],
-           cell_mm: int = 3, max_z: float = 0.0) -> bytes | None:
-    """PNG of the print as the camera should see it. blocks: (cx, cy, height_mm, tool) for each cell_mm block.
+           cell_mm: int = 3, max_z: float = 0.0, reference: tuple[bytes, float] | None = None) -> bytes | None:
+    """PNG of the print as the camera should see it. reference: an earlier photo of the empty plate (W x H RGB bytes) and
+    the bed height it was taken at. With it the picture looks like the real printer. Without it a plain drawing is used.
+    blocks: (cx, cy, height_mm, tool) for each cell_mm block.
     bed_z is where the bed is now (the camera is fixed, the bed moves). None if the camera is not set up."""
     if not setup.ready:
         return None
@@ -152,9 +267,22 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
                 out.append(q)
         return out
 
-    rgb = bytearray(bytes(BACKGROUND) * (W * H))
-    _backdrop(rgb)
-    plate = ring([(*orient(x, y, rot, mirror), -bed_z) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))])
+    def bed_region(z: float) -> list[tuple[float, float]] | None:
+        """The bed as seen: the plate top and its white side edge (RIM_MM), as one outline."""
+        pts: list[tuple[float, float]] = []
+        for zz in (-z, -z - RIM_MM):
+            r = ring([(*orient(x, y, rot, mirror), zz) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))])
+            if r is None:
+                return None
+            pts += r
+        return _hull(pts)
+
+    if reference is not None and len(reference[0]) == W * H * 3:
+        rgb = _bed_background(setup, reference, bed_z, bed_region)
+    else:
+        rgb = bytearray(bytes(BACKGROUND) * (W * H))
+        _backdrop(rgb)
+    plate = None if reference is not None else ring([(*orient(x, y, rot, mirror), -bed_z) for x, y in ((0, 0), (PLATE_MM, 0), (PLATE_MM, PLATE_MM), (0, PLATE_MM))])
     if plate:
         _fill(rgb, plate, PLATE)
         for i in range(len(plate)):
@@ -186,5 +314,6 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
                 _fill(rgb, q, _shade(base, 0.5 + 0.1 * i))  # type: ignore[arg-type]
         q = [to_px(*orient(x0 + ex * cell_mm, y0 + ey * cell_mm, rot, mirror), h - bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
         if all(q):
-            _fill(rgb, q, _shade(base, 0.8 + 0.2 * (h / top)))  # type: ignore[arg-type]
+            grain = 0.95 + 0.05 * ((cx * 7 + cy * 13) % 5) / 4  # a little variation, so a flat top does not look like paint
+            _fill(rgb, q, _shade(base, (0.8 + 0.2 * (h / top)) * grain))  # type: ignore[arg-type]
     return png(W, H, rgb)
