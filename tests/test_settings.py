@@ -14,14 +14,14 @@ def make(tmp_path):
 def test_save_applies_in_place_and_persists(tmp_path):
     cfg = make(tmp_path)
     held = cfg.autopause  # a part of the app keeps this object
-    changed = settings.save(cfg, {"autopause.grace_s": 20, "camera.keepalive": "always",
+    changed = settings.save(cfg, {"autopause.grace_s": 20, "camera.keepalive": "off",
                                   "autopause.triggers": ["bed_not_clear"], "toolchanger.timeout_s": None})
     assert set(changed) == {"autopause.grace_s", "camera.keepalive", "autopause.triggers"}
     assert held.grace_s == 20 and held.triggers == ["bed_not_clear"]
     data = yaml.safe_load(settings.settings_path(cfg).read_text(encoding="utf-8"))
-    assert data["autopause"]["grace_s"] == 20 and data["camera"]["keepalive"] == "always"
+    assert data["autopause"]["grace_s"] == 20 and data["camera"]["keepalive"] == "off"
     fresh = settings.load_overrides(make(tmp_path))
-    assert fresh.autopause.grace_s == 20 and fresh.camera.keepalive == "always"
+    assert fresh.autopause.grace_s == 20 and fresh.camera.keepalive == "off"
     assert fresh.autopause.triggers == ["bed_not_clear"]
 
 
@@ -38,7 +38,7 @@ def test_bad_values_are_refused_and_nothing_changes(tmp_path):
         settings.save(cfg, {"printer.host": "1.2.3.4"})
     with pytest.raises(settings.SettingsError):
         settings.save(cfg, {"notifications.email.api_key_env": "X"})
-    assert cfg.camera.keepalive == "printing" and not settings.settings_path(cfg).exists()
+    assert cfg.camera.keepalive == "always" and not settings.settings_path(cfg).exists()
 
 
 def test_email_on_with_address(tmp_path):
@@ -52,9 +52,9 @@ def test_broken_file_is_ignored(tmp_path):
     path = settings.settings_path(cfg)
     path.parent.mkdir(parents=True)
     path.write_text("camera: {keepalive: sometimes}\n", encoding="utf-8")
-    assert settings.load_overrides(cfg).camera.keepalive == "printing"
+    assert settings.load_overrides(cfg).camera.keepalive == "always"
     path.write_text(": : not yaml [", encoding="utf-8")
-    assert settings.load_overrides(cfg).camera.keepalive == "printing"
+    assert settings.load_overrides(cfg).camera.keepalive == "always"
 
 
 def test_unknown_keys_in_file_are_ignored(tmp_path):

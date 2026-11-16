@@ -31,7 +31,7 @@ What exists so far (Milestone 0, no printer needed):
 - Self-test (`python -m guardian.selftest`) that checks the printer still offers everything Guardian reads.
   It also warns when the printer firmware changes
 - Optional local AI (see below)
-- Camera on the U1: snapshot polling, about 1 to 2 pictures a second. Guardian turns the camera on by itself while a print runs
+- Camera on the U1: snapshot polling, about 1 to 2 pictures a second. Guardian turns the camera on by itself, always by default
   (`camera.keepalive`, see below). With that off, footage exists only while the Snapmaker app has the camera view open
 - Names the printer's own camera AI alerts (dirty build plate, spaghetti, residue, dirty nozzle). The printer pauses the print
   itself. Guardian records it. Read from the printer's code, not yet seen on a real print (about 1 frame per second)
@@ -52,8 +52,8 @@ the camera off, so it cannot cut off the app. Each request is logged.
 
 Set `camera.keepalive` in your config:
 
-- `printing` (default): only while a print is running or paused. Idle printers are left alone.
-- `always`: also when idle.
+- `printing`: only while a print is running or paused. Idle printers are left alone.
+- `always` (default): also when idle, so the live camera is always on.
 - `off`: never. Guardian is then fully read only.
 
 The printer's log showed no cloud upload for these local sessions (the app's own sessions do upload). That is

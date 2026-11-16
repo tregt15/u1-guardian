@@ -48,7 +48,7 @@ class CameraConfig(_Section):
     snapshot_poll_s: float = Field(default=0.5, gt=0.05, le=5.0)
     # Let Guardian turn the U1 camera on by itself (sends camera.start_monitor, LAN only, never a stop).
     # off: never. printing: while a print runs or is paused (default). always: also when idle.
-    keepalive: Literal["off", "printing", "always"] = "printing"
+    keepalive: Literal["off", "printing", "always"] = "always"
     # A segment longer than segment_length_s + this is treated as hiding a footage gap.
     max_frame_gap_s: float = Field(default=3.0, gt=0.0)
     standin_codec: Literal["h264", "mjpeg"] = "h264"

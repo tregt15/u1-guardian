@@ -255,7 +255,7 @@ def test_settings_get_and_put(tmp_path):
     env.ctx.settings_fn = lambda changes: settings_mod.save(env.cfg, changes)
     env.client = TestClient(create_app(env.ctx))
     body = env.client.get("/api/settings").json()
-    assert body["writable"] and body["values"]["camera.keepalive"] == "printing"
+    assert body["writable"] and body["values"]["camera.keepalive"] == "always"
     assert any(f["key"] == "autopause.triggers" for f in body["fields"])
     r = env.client.put("/api/settings", json={"changes": {"camera.keepalive": "off"}})
     assert r.status_code == 200 and r.json()["changed"] == ["camera.keepalive"]
