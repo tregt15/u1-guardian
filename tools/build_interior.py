@@ -220,19 +220,8 @@ def build():
     add(BIN, [(1148, 560), (1240, 552), (1920, 640), (1920, 880), (1262, 762), (1205, 742), (1152, 600)], (196, 200, 204))
     add(BIN, [(1148, 558), (1240, 550), (1920, 636), (1920, 650), (1240, 566), (1150, 574)], (232, 234, 236))  # rim
     add(BIN, [(1262, 762), (1920, 880), (1920, 892), (1262, 772)], (225, 228, 230))
-    for pts, col in (([(1200, 700), (1260, 670), (1330, 650), (1420, 650), (1470, 690), (1440, 730), (1330, 755), (1250, 745)], (232, 232, 230)),
-                     ([(1320, 735), (1380, 720), (1440, 740), (1400, 765)], (236, 236, 236)),
-                     ([(1470, 765), (1520, 755), (1585, 770), (1560, 790), (1490, 788)], (40, 40, 44)),
-                     ([(1510, 735), (1560, 728), (1600, 748), (1540, 760)], (60, 60, 64))):
-        add(BIN, pts, col)
-    add(BIN, stroke((1420, 600), (1440, 650), 2.5), (30, 30, 30))
-    add(BIN, stroke((1440, 650), (1465, 700), 2.5), (30, 30, 30))
-    # docks (the black cups under each head) and cables above
-    for pts in (((1228, 470), (1330, 478), (1332, 545), (1296, 562), (1252, 550), (1226, 540)),
-                ((1378, 512), (1490, 500), (1494, 582), (1380, 588)),
-                ((1578, 528), (1690, 515), (1694, 592), (1582, 596)),
-                ((1806, 540), (1905, 532), (1905, 612), (1810, 616))):
-        add(DOCK, pts, (8, 8, 9))
+    # (the bin is drawn empty: the plastic bits in it in the photo are not part of the model)
+    # cables above the heads
     for a, b, w, col in (((1305, 0), (1330, 135), 12, (10, 10, 12)), ((1420, 0), (1425, 130), 10, (20, 20, 22)),
                          ((1470, 0), (1485, 120), 10, (150, 152, 150)), ((1560, 0), (1565, 118), 10, (14, 14, 16)),
                          ((1590, 0), (1600, 110), 10, (18, 18, 20)), ((1650, 0), (1655, 112), 12, (150, 152, 150)),
@@ -256,17 +245,52 @@ def build():
         bot = [bl[k] + (br[k] - bl[k]) * fx for k in range(3)]
         return tuple(round(top[k] + (bot[k] - top[k]) * fy, 1) for k in range(3))
 
-    decals = [  # (fx0, fy0, fx1, fy1, rgb)
-        (0.27, 0.03, 0.47, 0.11, (14, 14, 16)), (0.30, 0.14, 0.44, 0.23, (190, 190, 194)),
-        (0.05, 0.49, 0.55, 0.62, (60, 60, 62)), (0.30, 0.50, 0.46, 0.62, (8, 8, 9)),
-        (0.00, 0.67, 0.14, 0.78, (190, 190, 194)), (0.62, 0.67, 0.77, 0.78, (190, 190, 194)),
-        (0.00, 0.03, 0.02, 0.97, (150, 150, 90)), (0.95, 0.03, 0.97, 0.97, (150, 150, 90)),
-    ]
+    # The toolhead, measured on a zoomed picture. Positions are fractions of the front face: fx 0 to 1 left to right,
+    # fy 0 to 1 top to bottom. Below fy 1 is the nozzle block and the dock cup.
+    def box(i, x0, y0, x1, y1, rgb, into=None):
+        (HEADS[i] if into is None else into).append((rgb, [face_pt(i, x0, y0), face_pt(i, x1, y0), face_pt(i, x1, y1), face_pt(i, x0, y1)]))
+
+    def blob(i, cx, cy, rx, ry, rgb, into=None, n=14):
+        pts = [face_pt(i, cx + rx * math.cos(2 * math.pi * k / n), cy + ry * math.sin(2 * math.pi * k / n)) for k in range(n)]
+        (HEADS[i] if into is None else into).append((rgb, pts))
+
+    def shape(i, pts, rgb, into=None):
+        (HEADS[i] if into is None else into).append((rgb, [face_pt(i, x, y) for x, y in pts]))
+
     for i in range(4):
-        for fx0, fy0, fx1, fy1, col in decals:
-            HEADS[i].append((col, [face_pt(i, fx0, fy0), face_pt(i, fx1, fy0), face_pt(i, fx1, fy1), face_pt(i, fx0, fy1)]))
-        HEADS[i].append(((226, 212, 120), [face_pt(i, 0.36, 0.80), face_pt(i, 0.50, 0.65), face_pt(i, 0.64, 0.80)]))  # hazard sign
-        HEADS[i].append(((120, 120, 126), [face_pt(i, 0.38, 1.0), face_pt(i, 0.62, 1.0), face_pt(i, 0.58, 1.12), face_pt(i, 0.42, 1.12)]))  # nozzle
+        shape(i, [(0, 0.05), (0.05, 0), (0.95, 0), (1, 0.05), (1, 1), (0, 1)], (21, 22, 24))                # body, rounded top corners
+        shape(i, [(0, 0.05), (0.05, 0), (0.95, 0), (1, 0.05), (1, 0.10), (0, 0.10)], (31, 32, 35))          # lighter top
+        box(i, 0, 0.90, 1, 1, (14, 15, 16))                                                                 # darker bottom
+        box(i, 0.0, 0.10, 0.02, 0.97, (112, 124, 50))                                                       # yellow edge lines
+        box(i, 0.96, 0.10, 0.98, 0.97, (112, 124, 50))
+        box(i, 0.26, 0.05, 0.48, 0.15, (74, 74, 80))                                                        # top plug
+        box(i, 0.29, 0.07, 0.45, 0.13, (20, 20, 22))
+        box(i, 0.27, 0.17, 0.45, 0.27, (198, 200, 204))                                                     # top silver screw plate
+        blob(i, 0.36, 0.22, 0.04, 0.03, (120, 120, 126))
+        blob(i, 0.36, 0.22, 0.02, 0.015, (60, 60, 64))
+        for fy in (0.41, 0.59, 0.84):                                                                       # round holes
+            blob(i, 0.07, fy, 0.025, 0.016, (6, 6, 7), n=10)
+        box(i, 0.03, 0.485, 0.22, 0.545, (10, 10, 11))                                                      # latch slot with pin
+        blob(i, 0.11, 0.515, 0.035, 0.025, (196, 196, 200))
+        box(i, 0.285, 0.47, 0.48, 0.63, (66, 66, 72))                                                       # latch socket
+        box(i, 0.305, 0.49, 0.46, 0.61, (5, 5, 6))
+        box(i, 0.345, 0.55, 0.42, 0.60, (190, 118, 40))
+        for fx0 in (0.01, 0.63):                                                                            # lower silver screw plates
+            box(i, fx0, 0.67, fx0 + 0.14, 0.79, (186, 188, 193))
+            blob(i, fx0 + 0.07, 0.73, 0.035, 0.025, (70, 70, 76))
+        shape(i, [(0.25, 0.79), (0.385, 0.64), (0.52, 0.79)], (214, 198, 108))                              # hazard sign
+        shape(i, [(0.285, 0.775), (0.385, 0.665), (0.485, 0.775)], (226, 212, 124))
+        blob(i, 0.385, 0.735, 0.035, 0.024, (62, 56, 30))
+        box(i, 0.30, 1.0, 0.68, 1.10, (88, 89, 94))                                                         # nozzle block with fins
+        for fy in (1.025, 1.055, 1.085):
+            box(i, 0.30, fy, 0.68, fy + 0.012, (52, 52, 57))
+        shape(i, [(0.40, 1.10), (0.60, 1.10), (0.55, 1.18), (0.45, 1.18)], (150, 150, 156))                 # nozzle tip
+        # the dock cup stays when the head is away (so it goes in the static shapes)
+        box(i, -0.06, 1.14, 0.60, 1.42, (13, 13, 14), STATIC)
+        box(i, -0.06, 1.08, 0.22, 1.14, (22, 22, 24), STATIC)
+        box(i, -0.06, 1.14, 0.60, 1.165, (52, 52, 57), STATIC)
+        box(i, 0.22, 1.21, 0.50, 1.35, (4, 4, 5), STATIC)
+        blob(i, 0.08, 1.23, 0.035, 0.03, (172, 172, 178), STATIC)
     # ---- near the camera, fixed to the picture (no 3D): the dark curve at the bottom right ----
     PARKED.append(((20, 20, 22), [(190, 160), (250, 155), (250, 405), (195, 408)]))  # the beam's slider
     PARKED.append(((205, 205, 206), [(28, 40), (100, 60), (100, 400), (190, 400), (190, 438), (322, 440), (322, 487), (100, 487), (40, 470), (25, 400)]))

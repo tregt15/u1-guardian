@@ -121,7 +121,6 @@ def draw_heads(rgb: bytearray, view: View, away: int | None = None) -> None:
         tl, tr, br, bl = quad
         back = HEAD_DEPTH
         view.draw(rgb, [(tr[0], tr[1], tr[2]), (tr[0], tr[1] - back, tr[2]), (br[0], br[1] - back, br[2]), (br[0], br[1], br[2])], (10, 10, 11))  # right side
-        view.draw(rgb, [tl, tr, br, bl], (20, 21, 23))
         for color, pts in M.HEADS[i]:
             view.draw(rgb, pts, color)
 
