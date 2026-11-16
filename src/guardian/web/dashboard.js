@@ -166,14 +166,15 @@ function drawTop(s) {
 
 // The camera next to a simulated picture of what it should see now (drawn by Guardian from the print file, through the
 // camera setup). This is the same picture the AI is given to compare with the camera. Only while a print runs.
-let simImg = null, simAt = 0, simNote = null, simBox = null;
+let simImg = null, simAt = 0, simNote = null, simBox = null, simPal = null;
 function camAndSim(s) {
   const pf = s.print_file || {}, p = s.printer || {};
   if (!camWanted(s) || !pf.has_picture || !["printing", "paused"].includes(p.print_state)) { simBox = null; return camBox(s); }
   if (!simBox) {
     simImg = el("img", { class: "live", alt: "Simulated picture of what the camera should see" });
     simNote = el("p", { class: "cam-note" });
-    simBox = el("div", {}, el("div", { class: "cam" }, simImg, el("span", { class: "cam-tag" }, el("span", { class: "dot" }), "Should see")), simNote);
+    simPal = el("div", {});
+    simBox = el("div", {}, el("div", { class: "cam" }, simImg, el("span", { class: "cam-tag" }, el("span", { class: "dot" }), "Should see")), simNote, simPal);
     simAt = 0;
   }
   if (Date.now() - simAt > 15000) {  // a new picture every 15 s, swapped in only when it has loaded
@@ -184,13 +185,22 @@ function camAndSim(s) {
     next.src = "/api/print/simulated.png?t=" + simAt + tokenQuery("&");
   }
   if (!simNote.textContent) simNote.textContent = "Drawing the simulated picture...";
+  const pal = palette(s);
+  simPal.replaceChildren(...(pal ? [pal] : []));
   return el("div", { style: "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px" }, el("div", {}, camBox(s)), simBox);
 }
 function simText(s) {
   const p = s.printer || {}, pf = s.print_file || {};
   return "Simulation from the print file" + (p.print_progress != null ? ", " + Math.round(p.print_progress) + "% done" : "") +
     (pf.max_z_mm ? ", " + pf.max_z_mm + " mm tall so far" : "") + ". It is drawn from the camera's point of view, so it should look like the live picture. " +
-    "It has no toolheads, shadows or lens bending, so small edge differences are normal.";
+    "It is built on a photo of the empty plate, so the toolheads in it do not move. Small edge differences are normal.";
+}
+function palette(s) {  // the print's filament colors, from the print file
+  const pal = ((s.print_file || {}).palette) || [];
+  if (!pal.length) return null;
+  return el("div", { class: "row", style: "gap:10px;flex-wrap:wrap;margin-top:6px" }, el("span", { class: "tiny muted" }, "Colors in this print:"),
+    ...pal.map(c => el("span", { class: "tiny", style: "display:inline-flex;align-items:center;gap:5px" },
+      el("span", { style: "width:14px;height:14px;border-radius:4px;border:1px solid #888;background:" + c.hex }), "T" + c.tool + " " + c.name)));
 }
 
 // The plate as the print file says it should look now (drawn from the G-code, seen from above).

@@ -251,6 +251,16 @@ class App:
                 "height_now": pos[2] if len(pos) > 2 and isinstance(pos[2], (int, float)) else None,
                 "height_total": meta.get("object_height"), "colors": sorted(set(colors))}
 
+    def print_palette(self) -> list[dict]:
+        """The file's filament colors for the tools this print uses: [{tool, hex, name}]. For the legend under the simulated picture."""
+        st = self.tracker.status
+        name = st.get("print_stats", {}).get("filename")
+        if not name or self._file_meta.get("filename") != name:
+            return []
+        used = st.get("print_task_config", {}).get("extruders_used") or []
+        hexes = self._file_meta.get("hex") or []
+        return [{"tool": i, "hex": h, "name": color_name(h)} for i, h in enumerate(hexes) if not used or (i < len(used) and used[i])]
+
     def _follow_gcode(self) -> None:
         """Keep the plate height map up to date, every 30 s, in the background."""
         if self._gcode_task and not self._gcode_task.done():
@@ -671,7 +681,7 @@ class App:
             "match": self.match_status(),
             "print_file": {"read_mb": round(self.gcode.read_upto / 1e6, 1) if self.gcode.filename else 0,
                            "max_z_mm": round(self.gcode.plate.max_z, 2), "error": self.gcode_error,
-                           "has_picture": bool(self.gcode.filename and self.gcode.plate.max_z)},
+                           "has_picture": bool(self.gcode.filename and self.gcode.plate.max_z), "palette": self.print_palette()},
             "selftest": {
                 "ok": self.selftest_result["ok"] if self.selftest_result else None,
                 "ran_utc": self.selftest_result["ran_utc"] if self.selftest_result else None,

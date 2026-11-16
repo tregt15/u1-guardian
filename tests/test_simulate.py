@@ -98,3 +98,17 @@ def test_reference_photo_is_the_backdrop_and_the_bed_slides_with_its_height(tmp_
     flat = {px(rows, x, y) for x in range(0, simulate.W, 16) for y in range(0, simulate.H, 16)}
     assert simulate.DARK in flat and (200, 120, 40) in flat
     assert simulate.render(s, [], 5.0, [], reference=(b"short", 5.0)) is not None  # a bad photo falls back to the drawing
+
+
+def test_print_palette_lists_the_used_tools_with_color_words():
+    from types import SimpleNamespace
+
+    from guardian.main import App
+    me = SimpleNamespace(tracker=SimpleNamespace(status={"print_stats": {"filename": "a.gcode"},
+                                                         "print_task_config": {"extruders_used": [False, True, False, True]}}),
+                         _file_meta={"filename": "a.gcode", "hex": ["#FFEBCB", "#FFFFFF", "#000000", "#FF9709"]})
+    pal = App.print_palette(me)
+    assert [c["tool"] for c in pal] == [1, 3] and pal[0]["hex"] == "#FFFFFF" and pal[1]["name"]
+    me._file_meta = {}
+    assert App.print_palette(me) == []
+

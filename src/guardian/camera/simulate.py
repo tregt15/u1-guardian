@@ -288,6 +288,8 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
         for i in range(len(plate)):
             _line(rgb, plate[i], plate[(i + 1) % len(plate)], EDGE)
     tools = [hex_rgb(c) for c in colors] or [(230, 230, 230)]
+    # A black filament would vanish on the dark plate, so very dark colors are lifted a little. The legend shows the real colors.
+    tools = [c if max(c) >= 45 else (45, 45, 48) for c in tools]
     grid = {(cx, cy): h for cx, cy, h, _ in blocks}
     top = max(1.0, max_z or max((b[2] for b in blocks), default=1.0))
     order = []
