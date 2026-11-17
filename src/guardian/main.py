@@ -438,7 +438,7 @@ class App:
         cell, blocks = 1, []
         if have:
             for cell in (1, 2, 3):  # the finest blocks that stay quick to draw
-                blocks = plate.blocks(cell)
+                blocks = plate.blocks(cell, with_base=True)
                 if len(blocks) <= 30000:
                     break
         pos = self.tracker.status.get("toolhead", {}).get("position") or []

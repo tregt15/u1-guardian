@@ -21,6 +21,9 @@ def setup_for(tmp_path):
     return s
 
 
+DARK_PLATE = tuple(scene3d.DARKEN[c] for c in scene3d.PLATE)  # the whole picture is drawn a little darker
+
+
 def pixels(data: bytes):
     """Decode our own PNG (filter 0 rows, 8 bit RGB) into rows of bytes."""
     assert data.startswith(bytes([137]) + b"PNG")
@@ -64,7 +67,7 @@ def test_a_printed_block_is_drawn_in_its_color_where_the_camera_would_see_it(tmp
     assert r > 150 and g < 30 and b < 30  # filament red, top face
     empty = pixels(simulate.render(s, [], 0.0, []))
     u0, v0 = project(s.data["P"], 136.5, 136.5, 0.0)  # the plate under the block
-    assert px(empty, u0 * 0.5, v0 * 0.5) == scene3d.PLATE  # without the block, bare plate
+    assert px(empty, u0 * 0.5, v0 * 0.5) == DARK_PLATE  # without the block, bare plate
 
 
 def test_the_plate_moves_with_the_bed(tmp_path):
@@ -89,7 +92,7 @@ def test_the_lens_bend_moves_the_picture_and_the_plate_is_drawn(tmp_path):
     assert flat != bent
     rows = pixels(bent)
     colors = {px(rows, x, y) for x in range(0, simulate.W, 8) for y in range(0, simulate.H, 8)}
-    assert scene3d.PLATE in colors
+    assert DARK_PLATE in colors
 
 
 def test_the_3d_scene_draws_the_interior_under_a_lowered_bed(tmp_path, shipped_camera_setup):
@@ -159,3 +162,33 @@ def test_a_new_print_forgets_the_plate_map_of_the_last_one():
     me.tracker.print_state = "printing"
     App._new_print_check(me)                      # pause then resume is the same print
     assert me.gcode.plate.max_z > 0
+
+
+def test_overhangs_are_kept_and_drawn(tmp_path):
+    """Plastic with nothing under it (an overhang or a bridge) has a start height above the plate, and the picture shows the
+    gap under it instead of a solid column."""
+    plate = PlateMap()
+    for z in (0.25, 0.45, 0.65, 0.85):            # a tower at x 10 to 11, layer after layer
+        plate.mark(10.1, 10.1, 10.9, 10.1, z, 0)
+    for z in (0.25, 0.45):                          # a cell that is only reached high up, after a gap: an overhang
+        plate.mark(20.1, 10.1, 20.9, 10.1, z, 0)
+    plate.mark(20.1, 10.1, 20.9, 10.1, 3.05, 0)
+    plate.mark(30.1, 10.1, 30.9, 10.1, 3.05, 0)     # plastic laid high with nothing below at all
+    by_cell = {(b[0], b[1]): b for b in plate.blocks(1, with_base=True)}
+    assert by_cell[(10, 10)][4] == 0.0              # the tower stands on the plate
+    assert by_cell[(20, 10)][2] == 3.1 or abs(by_cell[(20, 10)][2] - 3.1) < 0.11
+    assert 2.5 < by_cell[(20, 10)][4] < 3.0         # it starts well above the plate
+    assert 2.5 < by_cell[(30, 10)][4] < 3.0
+    assert plate.blocks(1) == [b[:4] for b in plate.blocks(1, with_base=True)]  # the plain form is unchanged
+    s = setup_for(tmp_path)
+    solid = [(45, 45, 10.0, 1)]
+    hanging = [(45, 45, 10.0, 1, 6.0)]
+    assert simulate.render(s, solid, 0.0, ["#000000", "#ff0000"]) != simulate.render(s, hanging, 0.0, ["#000000", "#ff0000"])
+
+
+def test_the_moving_carriage_is_not_drawn_but_the_empty_dock_is(tmp_path, shipped_camera_setup):
+    s = CameraSetup(tmp_path)
+    assert not scene3d.DRAW_MOVING_CARRIAGE
+    a = simulate.render(s, [], 5.0, [], carriage_xy=(135.0, 250.0), away=1)
+    b = simulate.render(s, [], 5.0, [], carriage_xy=(60.0, 100.0), away=1)
+    assert a == b  # where the carriage is does not change the picture

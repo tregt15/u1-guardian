@@ -25,6 +25,12 @@ EDGE = (120, 108, 70)
 # picture than the model put it, so the bed height is stretched a little: 200 mm counts as 200 * BED_SCALE. Measured on one
 # picture (2026-11-16). UNVERIFIED for other heights. Better would be clicks on a picture with the bed far down.
 BED_SCALE = 1.017
+# The moving carriage (box, beam and slider) did not line up with the real one, so it is not drawn while it moves (owner asked,
+# 2026-11-16). The parked carriage is still drawn, and a toolhead that is on the carriage leaves its dock empty.
+DRAW_MOVING_CARRIAGE = False
+# The whole picture is made a little darker, like the camera's own picture (owner asked, 2026-11-16).
+BRIGHTNESS = 0.8
+DARKEN = bytes(int(i * BRIGHTNESS) for i in range(256))
 RIM_MM = 14.0          # the bed's white side edge, below the plate top. Moves with the bed.
 HEAD_DEPTH = 26.0      # how far a docked toolhead reaches back from its front face (y = -12)
 HEAD_FRONT_Y = -12.0
@@ -202,4 +208,4 @@ def is_parked(x: float, y: float) -> bool:
 def draw_foreground(rgb: bytearray, parked: bool = False) -> None:
     k = W / SRC_W
     for color, pts in (M.PARKED if parked else []) + M.FOREGROUND:
-        _fill(rgb, [(x * k, y * k) for x, y in pts], color)
+        _fill(rgb, [(x * k, y * k) for x, y in pts], tuple(DARKEN[c] for c in color))

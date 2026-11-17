@@ -101,17 +101,20 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
     rgb = S.background(view)
     S.draw_heads(rgb, view, away)
     S.draw_bed(rgb, view, bed_z)
+    rgb = bytearray(bytes(rgb).translate(S.DARKEN))  # the printer and the room a little darker. The print itself is not.
     tools = [hex_rgb(c) for c in colors] or [(230, 230, 230)]
     # A black filament would vanish on the dark plate, so very dark colors are lifted a little. The legend shows the real colors.
     tools = [c if max(c) >= 45 else (45, 45, 48) for c in tools]
-    grid = {(cx, cy): h for cx, cy, h, _ in blocks}
+    grid = {(b[0], b[1]): b[2] for b in blocks}
     top = max(1.0, max_z or max((b[2] for b in blocks), default=1.0))
     order = []
-    for cx, cy, h, t in blocks:
+    for b in blocks:  # (cx, cy, height, tool) or with a fifth number: where the plastic starts (above 0 is an overhang)
+        cx, cy, h, t = b[:4]
+        base = float(b[4]) if len(b) > 4 else 0.0
         o = view.to_corner((cx + 0.5) * cell_mm, (cy + 0.5) * cell_mm)
-        order.append((-math.hypot(o[0] - cam[0], o[1] - cam[1]), "b", (cx, cy, h, t, o)))
+        order.append((-math.hypot(o[0] - cam[0], o[1] - cam[1]), "b", (cx, cy, h, t, o, base)))
     parked = carriage_xy is not None and S.is_parked(*carriage_xy)
-    if carriage_xy is not None and not parked:
+    if carriage_xy is not None and not parked and S.DRAW_MOVING_CARRIAGE:
         centre, faces = S.carriage_parts(view, *carriage_xy)
         order.append((-math.hypot(centre[0] - cam[0], centre[1] - cam[1]), "c", faces))
     order.sort(key=lambda e: e[0])  # far first, so near ones cover them
@@ -139,11 +142,11 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
             for pts, color in d:
                 view.draw(rgb, pts, color)
             continue
-        cx, cy, h, t, o = d
+        cx, cy, h, t, o, floor = d
         base = tools[t % len(tools)]
         x0, y0 = cx * cell_mm, cy * cell_mm
         for i, (dx, dy, ax, ay, bx, by) in enumerate(neighbours):
-            lower = grid.get((cx + dx, cy + dy), 0.0)
+            lower = max(grid.get((cx + dx, cy + dy), 0.0), floor)  # an overhang has no side below where it starts
             if lower >= h:
                 continue
             a = view.to_corner(x0 + ax * cell_mm, y0 + ay * cell_mm)
@@ -154,10 +157,10 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
             q = [view.px(a[0], a[1], lower - bed_z), view.px(b[0], b[1], lower - bed_z),
                  view.px(b[0], b[1], h - bed_z), view.px(a[0], a[1], h - bed_z)]
             if all(q):
-                _fill(rgb, q, _shade(base, 0.5 + 0.1 * i))  # type: ignore[arg-type]
+                _fill(rgb, q, _shade(base, 0.66 + 0.1 * i))  # type: ignore[arg-type]
         q = [view.px(*view.to_corner(x0 + ex * cell_mm, y0 + ey * cell_mm), h - bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
         if all(q):
             grain = 0.94 + 0.06 * ((cx * 7 + cy * 13 + int(h * 5)) % 5) / 4  # a little layer to layer change
-            _fill(rgb, q, _shade(base, (0.8 + 0.2 * (h / top)) * grain))  # type: ignore[arg-type]
+            _fill(rgb, q, _shade(base, (0.9 + 0.1 * (h / top)) * grain))  # type: ignore[arg-type]
     S.draw_foreground(rgb, parked)
     return png(W, H, rgb)

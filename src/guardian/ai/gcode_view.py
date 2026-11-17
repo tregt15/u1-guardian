@@ -28,6 +28,9 @@ BED_MM = 270  # U1 build plate is 270 x 270 mm
 CELL_MM = 1.0
 N = int(BED_MM / CELL_MM)
 CHUNK = 1024 * 1024
+OVERHANG_GAP = 10      # 1.0 mm in 0.1 mm units: a cell skipped for more than this many layers starts a new run (an overhang)
+LAYER_GUESS = 3        # 0.3 mm: how thick the first bit of a new run is drawn
+FIRST_LAYER_MAX = 6    # 0.6 mm: plastic this low always stands on the plate
 WORD_RE = re.compile(r"([A-Z])(-?\d*\.?\d+)")
 TOOL_RE = re.compile(r"^T(\d)\b")
 
@@ -37,26 +40,49 @@ class PlateMap:
     """Height of printed plastic on the plate, in 0.1 mm, per 1 mm cell, and the tool of the top layer."""
     height: array = field(default_factory=lambda: array("H", bytes(2 * N * N)))
     tool: array = field(default_factory=lambda: array("b", bytes(N * N)))
+    # Where the top run of plastic starts, in 0.1 mm. 0 means it stands on the plate. Above 0 is an overhang or a bridge:
+    # plastic with nothing under it, because the cell had a gap of more than OVERHANG_GAP before this layer reached it.
+    base: array = field(default_factory=lambda: array("H", bytes(2 * N * N)))
     max_z: float = 0.0
 
     def mark(self, x0: float, y0: float, x1: float, y1: float, z: float, t: int) -> None:
         length = math.hypot(x1 - x0, y1 - y0)
         steps = max(1, int(length / (CELL_MM / 2)))
         zz = min(65535, int(round(z * 10)))
+        # A line of plastic is about 0.45 mm wide, so it also touches the cells just beside the path. Without this the walls
+        # of a part come out with holes where the path runs along a cell edge.
+        nx, ny = ((y0 - y1) / length * 0.25, (x1 - x0) / length * 0.25) if length > 1e-9 else (0.0, 0.0)
         for i in range(steps + 1):
             f = i / steps
-            cx, cy = int((x0 + (x1 - x0) * f) / CELL_MM), int((y0 + (y1 - y0) * f) / CELL_MM)
-            if 0 <= cx < N and 0 <= cy < N:
-                k = cy * N + cx
-                if zz >= self.height[k]:
-                    self.height[k] = zz
-                    self.tool[k] = t
+            px, py = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+            seen = set()
+            for ox, oy in ((0.0, 0.0), (nx, ny), (-nx, -ny)):
+                cx, cy = int((px + ox) / CELL_MM), int((py + oy) / CELL_MM)
+                if (cx, cy) in seen:
+                    continue
+                seen.add((cx, cy))
+                self._mark_cell(cx, cy, zz, t)
         if z > self.max_z:
             self.max_z = z
 
-    def blocks(self, cell: int = 3) -> list[tuple[int, int, float, int]]:
-        """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out."""
-        best: dict[tuple[int, int], tuple[int, int]] = {}
+    def _mark_cell(self, cx: int, cy: int, zz: int, t: int) -> None:
+        if not (0 <= cx < N and 0 <= cy < N):
+            return
+        k = cy * N + cx
+        old = self.height[k]
+        if zz < old:
+            return
+        if old == 0:
+            self.base[k] = max(0, zz - LAYER_GUESS) if zz > FIRST_LAYER_MAX else 0
+        elif zz - old > OVERHANG_GAP:
+            self.base[k] = zz - LAYER_GUESS  # a new run of plastic above an empty gap
+        self.height[k] = zz
+        self.tool[k] = t
+
+    def blocks(self, cell: int = 3, with_base: bool = False) -> list[tuple]:
+        """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out.
+        With with_base each block also has where its plastic starts in mm (above 0 is an overhang)."""
+        best: dict[tuple[int, int], tuple[int, int, int]] = {}
         for cy in range(N):
             row = cy * N
             for cx in range(N):
@@ -64,8 +90,10 @@ class PlateMap:
                 if h:
                     key = (cx // cell, cy // cell)
                     if key not in best or h > best[key][0]:
-                        best[key] = (h, self.tool[row + cx])
-        return [(cx, cy, round(h / 10, 1), t) for (cx, cy), (h, t) in best.items()]
+                        best[key] = (h, self.tool[row + cx], self.base[row + cx])
+        if with_base:
+            return [(cx, cy, round(h / 10, 1), t, round(b / 10, 1)) for (cx, cy), (h, t, b) in best.items()]
+        return [(cx, cy, round(h / 10, 1), t) for (cx, cy), (h, t, b) in best.items()]
 
     def covered_cells(self) -> int:
         return sum(1 for h in self.height if h)
