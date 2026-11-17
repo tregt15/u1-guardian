@@ -19,3 +19,7 @@ logs/
 
 # keys typed on the Settings page (normally in the data folder, this is a safety net)
 secrets.json
+
+# marketing pictures made by tools/marketing (rebuild any time)
+marketing/shots/
+marketing/posters/
