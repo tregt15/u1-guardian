@@ -129,6 +129,7 @@ class App:
         self.gcode = GcodeFollower(f"http://{cfg.printer.host}:{self._printer_port}")
         self._gcode_task: asyncio.Task | None = None
         self._gcode_last = 0.0
+        self._prev_print_state: str | None = None
         self.gcode_error: str | None = None
         self.camera_setup = CameraSetup(cfg.storage.resolved_data_dir())
         self.frames_dir = cfg.storage.resolved_data_dir() / "calibration" / "frames"
@@ -271,6 +272,20 @@ class App:
         hexes = self._file_meta.get("hex") or []
         return [{"tool": i, "hex": h, "name": color_name(h)} for i, h in enumerate(hexes) if not used or (i < len(used) and used[i])]
 
+    def _new_print_check(self) -> None:
+        """When a print starts, forget the plate map of the last one. Bug seen 2026-11-16: the same file printed again kept
+        the finished model, so the picture showed the whole print from the first layer."""
+        state = self.tracker.print_state
+        if state == "printing" and self._prev_print_state not in ("printing", "paused"):
+            self._reset_plate_map()
+        self._prev_print_state = state
+
+    def _reset_plate_map(self) -> None:
+        if self._gcode_task and not self._gcode_task.done():
+            self._gcode_task.cancel()
+        self.gcode.reset(None)
+        self._gcode_last = 0.0  # read again right away
+
     def _follow_gcode(self) -> None:
         """Keep the plate height map up to date, every 30 s, in the background."""
         if self._gcode_task and not self._gcode_task.done():
@@ -285,6 +300,9 @@ class App:
         if self.tracker.print_state == "complete" and self._file_meta.get("filename") == name:
             pos = self._file_meta.get("size")  # a finished print is still on the plate: read the file to the end
         if not name or not isinstance(pos, int):
+            return
+        if self.gcode.filename == name and pos < self.gcode.read_upto and self.tracker.print_state in ("printing", "paused"):
+            self._reset_plate_map()  # the printer is earlier in the file than we have read: it is a new print
             return
 
         async def run() -> None:
@@ -837,6 +855,7 @@ class App:
             except Exception:  # noqa: BLE001
                 log.exception("auto pause tick failed")
             try:
+                self._new_print_check()
                 if self.tracker.print_state == "complete":
                     await self._refresh_file_meta()
                     self._follow_gcode()

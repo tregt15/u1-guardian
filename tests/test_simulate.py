@@ -132,3 +132,30 @@ def test_print_palette_lists_the_used_tools_with_color_words():
     me._file_meta = {}
     assert App.print_palette(me) == []
 
+
+
+def test_a_new_print_forgets_the_plate_map_of_the_last_one():
+    """Bug seen 2026-11-16: printing the same file again kept the finished model, so the picture showed the whole print."""
+    from types import SimpleNamespace
+
+    from guardian.ai.gcode_view import GcodeFollower
+    from guardian.main import App
+
+    me = SimpleNamespace(tracker=SimpleNamespace(print_state="complete"), _prev_print_state=None,
+                         gcode=GcodeFollower("http://x"), _gcode_task=None, _gcode_last=5.0)
+    me._reset_plate_map = lambda: App._reset_plate_map(me)
+    me.gcode.reset("a.gcode")
+    me.gcode.plate.mark(10, 10, 20, 10, 5.0, 0)
+    me.gcode.read_upto = 999
+    App._new_print_check(me)                      # finished: the print is still on the plate
+    assert me.gcode.plate.max_z > 0
+    me.tracker.print_state = "printing"
+    App._new_print_check(me)                      # a new print starts
+    assert me.gcode.plate.max_z == 0 and me.gcode.filename is None and me._gcode_last == 0.0
+    me.gcode.reset("a.gcode")
+    me.gcode.plate.mark(10, 10, 20, 10, 5.0, 0)
+    me.tracker.print_state = "paused"
+    App._new_print_check(me)
+    me.tracker.print_state = "printing"
+    App._new_print_check(me)                      # pause then resume is the same print
+    assert me.gcode.plate.max_z > 0
