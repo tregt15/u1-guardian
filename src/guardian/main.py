@@ -437,8 +437,8 @@ class App:
         colors = self._file_meta.get("hex") or [] if self._file_meta.get("filename") == name else []
         cell, blocks = 1, []
         if have:
-            for cell in (1, 2, 3):  # the finest blocks that stay quick to draw
-                blocks = plate.blocks(cell, with_base=True)
+            for cell in (2, 3):  # the finest blocks that stay quick to draw. 1 mm blocks showed slices.
+                blocks = plate.blocks(cell, with_base=True, clean=True)
                 if len(blocks) <= 30000:
                     break
         pos = self.tracker.status.get("toolhead", {}).get("position") or []

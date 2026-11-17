@@ -28,7 +28,7 @@ BED_MM = 270  # U1 build plate is 270 x 270 mm
 CELL_MM = 1.0
 N = int(BED_MM / CELL_MM)
 CHUNK = 1024 * 1024
-OVERHANG_GAP = 10      # 1.0 mm in 0.1 mm units: a cell skipped for more than this many layers starts a new run (an overhang)
+OVERHANG_GAP = 30      # 3.0 mm in 0.1 mm units: a cell skipped for more than this starts a new run (an overhang). 1 mm cut the walls into slices.
 LAYER_GUESS = 3        # 0.3 mm: how thick the first bit of a new run is drawn
 FIRST_LAYER_MAX = 6    # 0.6 mm: plastic this low always stands on the plate
 WORD_RE = re.compile(r"([A-Z])(-?\d*\.?\d+)")
@@ -79,21 +79,59 @@ class PlateMap:
         self.height[k] = zz
         self.tool[k] = t
 
-    def blocks(self, cell: int = 3, with_base: bool = False) -> list[tuple]:
+    def blocks(self, cell: int = 3, with_base: bool = False, clean: bool = False) -> list[tuple]:
         """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out.
-        With with_base each block also has where its plastic starts in mm (above 0 is an overhang)."""
+        With with_base each block also has where its plastic starts in mm (above 0 is an overhang).
+        With clean the map is tidied first (one cell holes filled, ragged heights smoothed, lone floating cells made solid),
+        so the picture shows solid walls and not slices (2026-11-17)."""
+        height, tool, base = self.height, self.tool, self.base
+        if clean:
+            height, tool, base = self._tidy()
         best: dict[tuple[int, int], tuple[int, int, int]] = {}
         for cy in range(N):
             row = cy * N
             for cx in range(N):
-                h = self.height[row + cx]
+                h = height[row + cx]
                 if h:
                     key = (cx // cell, cy // cell)
                     if key not in best or h > best[key][0]:
-                        best[key] = (h, self.tool[row + cx], self.base[row + cx])
+                        best[key] = (h, tool[row + cx], base[row + cx])
         if with_base:
             return [(cx, cy, round(h / 10, 1), t, round(b / 10, 1)) for (cx, cy), (h, t, b) in best.items()]
         return [(cx, cy, round(h / 10, 1), t) for (cx, cy), (h, t, b) in best.items()]
+
+    def _tidy(self):
+        """Copies of height, tool and base with the small mess removed. Only the area that has plastic is visited."""
+        height, tool, base = list(self.height), list(self.tool), list(self.base)
+        rows = [cy for cy in range(N) if any(self.height[cy * N:(cy + 1) * N])]
+        if not rows:
+            return height, tool, base
+        lo, hi = max(1, rows[0] - 1), min(N - 2, rows[-1] + 1)
+        near = (-1, 1, -N, N, -N - 1, -N + 1, N - 1, N + 1)
+        src_h, src_b = list(height), list(base)
+        for cy in range(lo, hi + 1):  # fill a hole that has plastic on most sides
+            for cx in range(1, N - 1):
+                k = cy * N + cx
+                if src_h[k]:
+                    continue
+                around = sorted(src_h[k + d] for d in near if src_h[k + d])
+                if len(around) >= 5:
+                    height[k] = around[len(around) // 2]
+                    tool[k] = tool[k + 1] or tool[k - 1]
+        src_h = list(height)
+        for cy in range(lo, hi + 1):  # smooth ragged heights (median of the 3 x 3 cells)
+            for cx in range(1, N - 1):
+                k = cy * N + cx
+                if src_h[k]:
+                    around = sorted(src_h[k + d] for d in (0,) + near if src_h[k + d])
+                    if len(around) >= 5:
+                        height[k] = around[len(around) // 2]
+        for cy in range(lo, hi + 1):  # an overhang needs neighbours that also overhang, a lone one is just a wall cell
+            for cx in range(1, N - 1):
+                k = cy * N + cx
+                if src_b[k] and sum(1 for d in near if src_b[k + d]) < 4:
+                    base[k] = 0
+        return height, tool, base
 
     def covered_cells(self) -> int:
         return sum(1 for h in self.height if h)
