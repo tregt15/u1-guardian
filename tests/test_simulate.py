@@ -2,7 +2,6 @@
 
 import zlib
 
-from guardian.ai import gcode_view as G
 from guardian.ai.gcode_view import PlateMap
 from guardian.camera import calibration, scene3d, simulate
 from guardian.camera.calibration import CORNERS, CameraSetup, project
@@ -173,13 +172,13 @@ def test_overhangs_are_kept_and_drawn(tmp_path):
         plate.mark(10.1, 10.1, 10.9, 10.1, z, 0)
     for z in (0.25, 0.45):                          # a cell that is only reached high up, after a gap: an overhang
         plate.mark(20.1, 10.1, 20.9, 10.1, z, 0)
-    plate.mark(20.1, 10.1, 20.9, 10.1, 4.05, 0)
-    plate.mark(30.1, 10.1, 30.9, 10.1, 4.05, 0)     # plastic laid high with nothing below at all
+    plate.mark(20.1, 10.1, 20.9, 10.1, 3.05, 0)
+    plate.mark(30.1, 10.1, 30.9, 10.1, 3.05, 0)     # plastic laid high with nothing below at all
     by_cell = {(b[0], b[1]): b for b in plate.blocks(1, with_base=True)}
     assert by_cell[(10, 10)][4] == 0.0              # the tower stands on the plate
-    assert by_cell[(20, 10)][2] == 4.1 or abs(by_cell[(20, 10)][2] - 4.1) < 0.11
-    assert 3.5 < by_cell[(20, 10)][4] < 4.0         # it starts well above the plate
-    assert 3.5 < by_cell[(30, 10)][4] < 4.0
+    assert by_cell[(20, 10)][2] == 3.1 or abs(by_cell[(20, 10)][2] - 3.1) < 0.11
+    assert 2.5 < by_cell[(20, 10)][4] < 3.0         # it starts well above the plate
+    assert 2.5 < by_cell[(30, 10)][4] < 3.0
     assert plate.blocks(1) == [b[:4] for b in plate.blocks(1, with_base=True)]  # the plain form is unchanged
     s = setup_for(tmp_path)
     solid = [(45, 45, 10.0, 1)]
@@ -195,18 +194,19 @@ def test_the_moving_carriage_is_not_drawn_but_the_empty_dock_is(tmp_path, shippe
     assert a == b  # where the carriage is does not change the picture
 
 
-def test_clean_blocks_fill_holes_and_make_lone_overhangs_solid():
-    """A one cell hole inside a wall is filled, and a lone floating cell (not part of a real overhang) stands on the plate."""
+def test_smooth_blocks_remove_spikes_but_keep_walls():
+    """One tall cell in a flat patch is flattened. A tall wall stays tall."""
     plate = PlateMap()
-    for cx in range(10, 15):
-        for cy in range(10, 15):
-            for z in (0.25, 0.45, 0.65):
-                plate.mark(cx + 0.1, cy + 0.5, cx + 0.9, cy + 0.5, z, 0)
-    k = 12 * G.N + 12
-    plate.height[k] = 0                                  # a hole in the middle
-    plate.base[13 * G.N + 13] = 30                       # one cell that thinks it floats
-    raw = {(b[0], b[1]): b for b in plate.blocks(1, with_base=True)}
-    tidy = {(b[0], b[1]): b for b in plate.blocks(1, with_base=True, clean=True)}
-    assert (12, 12) not in raw and (12, 12) in tidy
-    assert raw[(13, 13)][4] == 3.0 and tidy[(13, 13)][4] == 0.0
-    assert len(plate.blocks(2, clean=True)) > 0
+    for cx in range(10, 16):
+        for cy in range(10, 16):
+            plate.mark(cx + 0.1, cy + 0.5, cx + 0.9, cy + 0.5, 1.0, 0)
+    plate.mark(12.1, 12.5, 12.9, 12.5, 2.0, 0)                    # a spike
+    for cy in range(10, 16):
+        for z in (1.0, 2.0, 3.0):
+            plate.mark(20.1, cy + 0.5, 20.9, cy + 0.5, z, 0)      # a wall, 3 mm high
+            plate.mark(21.1, cy + 0.5, 21.9, cy + 0.5, z, 0)
+            plate.mark(22.1, cy + 0.5, 22.9, cy + 0.5, z, 0)
+    raw = {(b[0], b[1]): b[2] for b in plate.blocks(1)}
+    smooth = {(b[0], b[1]): b[2] for b in plate.blocks(1, smooth=True)}
+    assert raw[(12, 12)] == 2.0 and smooth[(12, 12)] == 1.0
+    assert smooth[(21, 12)] == 3.0

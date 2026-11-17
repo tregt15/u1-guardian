@@ -28,9 +28,8 @@ BED_MM = 270  # U1 build plate is 270 x 270 mm
 CELL_MM = 1.0
 N = int(BED_MM / CELL_MM)
 CHUNK = 1024 * 1024
-OVERHANG_GAP = 30      # 3.0 mm in 0.1 mm units: a cell skipped for more than this starts a new run (an overhang). 1 mm cut the walls into slices.
+OVERHANG_GAP = 10      # 1.0 mm in 0.1 mm units: a cell skipped for more than this many layers starts a new run (an overhang)
 LAYER_GUESS = 3        # 0.3 mm: how thick the first bit of a new run is drawn
-BRIDGE = 4             # cells: the widest gap between two bits of plastic that the clean picture fills in
 FIRST_LAYER_MAX = 6    # 0.6 mm: plastic this low always stands on the plate
 WORD_RE = re.compile(r"([A-Z])(-?\d*\.?\d+)")
 TOOL_RE = re.compile(r"^T(\d)\b")
@@ -80,14 +79,12 @@ class PlateMap:
         self.height[k] = zz
         self.tool[k] = t
 
-    def blocks(self, cell: int = 3, with_base: bool = False, clean: bool = False) -> list[tuple]:
+    def blocks(self, cell: int = 3, with_base: bool = False, smooth: bool = False) -> list[tuple]:
         """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out.
         With with_base each block also has where its plastic starts in mm (above 0 is an overhang).
-        With clean the map is tidied first (gaps up to 4 cells filled, ragged heights smoothed, all columns solid),
-        so the picture shows solid walls with no holes (2026-11-17). Overhangs are not kept in the clean form."""
-        height, tool, base = self.height, self.tool, self.base
-        if clean:
-            height, tool, base = self._tidy()
+        With smooth each cell takes the middle height of the 3 x 3 cells around it (only where most of them have plastic), which
+        takes away the ragged pillar tops and keeps the 1 mm ribs (2026-11-17)."""
+        height = self._smoothed() if smooth else self.height
         best: dict[tuple[int, int], tuple[int, int, int]] = {}
         for cy in range(N):
             row = cy * N
@@ -96,56 +93,27 @@ class PlateMap:
                 if h:
                     key = (cx // cell, cy // cell)
                     if key not in best or h > best[key][0]:
-                        best[key] = (h, tool[row + cx], base[row + cx])
+                        best[key] = (h, self.tool[row + cx], self.base[row + cx])
         if with_base:
             return [(cx, cy, round(h / 10, 1), t, round(b / 10, 1)) for (cx, cy), (h, t, b) in best.items()]
         return [(cx, cy, round(h / 10, 1), t) for (cx, cy), (h, t, b) in best.items()]
 
-    def _tidy(self):
-        """Copies of height, tool and base with the small mess removed. Only the area that has plastic is visited."""
-        height, tool, base = list(self.height), list(self.tool), list(self.base)
-        rows = [cy for cy in range(N) if any(self.height[cy * N:(cy + 1) * N])]
+    def _smoothed(self):
+        """A copy of the heights with the median of each 3 x 3 neighbourhood. Only rows that have plastic are visited."""
+        src = self.height
+        out = array("H", src)
+        near = (0, -1, 1, -N, N, -N - 1, -N + 1, N - 1, N + 1)
+        rows = [cy for cy in range(N) if any(src[cy * N:(cy + 1) * N])]
         if not rows:
-            return height, tool, base
-        lo, hi = max(1, rows[0] - 1), min(N - 2, rows[-1] + 1)
-        near = (-1, 1, -N, N, -N - 1, -N + 1, N - 1, N + 1)
-        src_h = list(height)
-        for cy in range(lo, hi + 1):  # fill a hole that has plastic on most sides
+            return out
+        for cy in range(max(1, rows[0]), min(N - 2, rows[-1]) + 1):
             for cx in range(1, N - 1):
                 k = cy * N + cx
-                if src_h[k]:
-                    continue
-                around = sorted(src_h[k + d] for d in near if src_h[k + d])
-                if len(around) >= 5:
-                    height[k] = around[len(around) // 2]
-                    tool[k] = tool[k + 1] or tool[k - 1]
-        src_h = list(height)
-        for cy in range(max(BRIDGE, lo), min(N - 1 - BRIDGE, hi) + 1):  # bridge a gap up to BRIDGE cells wide that has plastic on both sides
-            for cx in range(BRIDGE, N - BRIDGE):
-                k = cy * N + cx
-                if src_h[k]:
-                    continue
-                fill = 0
-                for step in (1, N):
-                    lo_h = hi_h = 0
-                    for r in range(1, BRIDGE + 1):
-                        lo_h = lo_h or src_h[k - r * step]
-                        hi_h = hi_h or src_h[k + r * step]
-                    if lo_h and hi_h:
-                        fill = max(fill, min(lo_h, hi_h))
-                if fill:
-                    height[k] = fill
-                    tool[k] = tool[k - 1] or tool[k + 1] or tool[k - N]
-        src_h = list(height)
-        for cy in range(lo, hi + 1):  # smooth ragged heights (median of the 3 x 3 cells)
-            for cx in range(1, N - 1):
-                k = cy * N + cx
-                if src_h[k]:
-                    around = sorted(src_h[k + d] for d in (0,) + near if src_h[k + d])
+                if src[k]:
+                    around = sorted(src[k + d] for d in near if src[k + d])
                     if len(around) >= 5:
-                        height[k] = around[len(around) // 2]
-        base = [0] * len(base)  # solid columns: floating bits showed as holes, so overhangs are not drawn in the clean picture
-        return height, tool, base
+                        out[k] = around[len(around) // 2]
+        return out
 
     def covered_cells(self) -> int:
         return sum(1 for h in self.height if h)

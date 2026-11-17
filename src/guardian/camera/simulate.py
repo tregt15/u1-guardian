@@ -23,6 +23,8 @@ SRC_W = 1920  # the clicks in the camera setup are in full size (1920 wide) pict
 BACKGROUND = (28, 30, 36)
 PLATE = (46, 49, 56)
 EDGE = (120, 108, 70)
+SIDE_SHADE = 0.72  # wall brightness (plus 0.1 for each direction). The real print is white, so this is bright.
+TOP_SHADE = 0.95
 SEGMENTS = 24  # long edges are cut in pieces so they can bend with the lens
 
 
@@ -82,84 +84,6 @@ def _shade(c: tuple[int, int, int], f: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, int(v * f))) for v in c)  # type: ignore[return-value]
 
 
-MAX_RUN = 8  # cells joined into one face
-SIDE_SHADE = (0.78, 0.9, 0.84, 0.7)  # the four wall directions. Flat, so a wall is one clean color (the real print is white).
-
-
-def _stroke(rgb: bytearray, pts, color) -> None:
-    px = bytes(color)
-    n = len(pts)
-    for i in range(n):
-        a, b = pts[i], pts[(i + 1) % n]
-        steps = max(1, int(max(abs(b[0] - a[0]), abs(b[1] - a[1]))))
-        for s in range(steps + 1):
-            x, y = int(a[0] + (b[0] - a[0]) * s / steps), int(a[1] + (b[1] - a[1]) * s / steps)
-            if 0 <= x < W and 0 <= y < H:
-                rgb[(y * W + x) * 3:(y * W + x) * 3 + 3] = px
-
-
-def _print_items(view, grid: dict, bed_z: float, cell: int, tools: list, top: float) -> list:
-    """The print as faces to draw: top faces and wall faces, with neighbours of the same height joined into one long face
-    (so there are no slices and far fewer polygons). grid: (cx, cy) -> (height mm, tool, where the plastic starts mm).
-    Each item is (sort key, 3D points, color). Walls start at the neighbour's top, or at the overhang floor."""
-    cam = view.cam
-    items: list = []
-
-    def key(px: float, py: float) -> float:
-        c = view.to_corner(px, py)
-        return -math.hypot(c[0] - cam[0], c[1] - cam[1])
-
-    rows: dict[int, list] = {}
-    for (cx, cy), (h, t, _b) in grid.items():
-        rows.setdefault(cy, []).append((cx, h, t))
-    for cy, cells in rows.items():  # top faces: along x
-        cells.sort()
-        i = 0
-        while i < len(cells):
-            cx, h, t = cells[i]
-            j = i
-            while j + 1 < len(cells) and cells[j + 1][0] == cells[j][0] + 1 and cells[j + 1][1:] == (h, t) and j + 1 - i < MAX_RUN:
-                j += 1
-            x1 = cells[j][0] + 1
-            corners = [view.to_corner(x * cell, y * cell) for x, y in ((cx, cy), (x1, cy), (x1, cy + 1), (cx, cy + 1))]
-            shade = 0.9 + 0.1 * (h / top)
-            items.append((key((cx + x1) / 2 * cell, (cy + 0.5) * cell) + 0.02, [(c[0], c[1], h - bed_z) for c in corners],
-                          _shade(tools[t % len(tools)], shade)))
-            i = j + 1
-    for d, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):  # wall faces: the four directions
-        lines: dict[int, list] = {}
-        for (cx, cy), (h, t, floor) in grid.items():
-            nb = grid.get((cx + dx, cy + dy))
-            lower = max(nb[0] if nb else 0.0, floor)  # an overhang has no wall below where it starts
-            if lower < h:
-                lines.setdefault(cx if dx else cy, []).append((cy if dx else cx, lower, h, t))
-        for fixed, cells in lines.items():
-            cells.sort()
-            i = 0
-            while i < len(cells):
-                v, lower, h, t = cells[i]
-                j = i
-                while j + 1 < len(cells) and cells[j + 1][0] == cells[j][0] + 1 and cells[j + 1][1:] == (lower, h, t) and j + 1 - i < MAX_RUN:
-                    j += 1
-                v1 = cells[j][0] + 1
-                if dx:
-                    x = (fixed + (1 if dx > 0 else 0)) * cell
-                    a, b = (x, v * cell), (x, v1 * cell)
-                else:
-                    y = (fixed + (1 if dy > 0 else 0)) * cell
-                    a, b = (v * cell, y), (v1 * cell, y)
-                mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-                ca, cb = view.to_corner(*a), view.to_corner(*b)
-                cm = view.to_corner(*mid)
-                inside = view.to_corner(mid[0] - dx * cell / 2, mid[1] - dy * cell / 2)
-                if (cm[0] - inside[0]) * (cam[0] - cm[0]) + (cm[1] - inside[1]) * (cam[1] - cm[1]) > 0:  # faces the camera
-                    items.append((key(*mid) + 0.01,
-                                  [(ca[0], ca[1], lower - bed_z), (cb[0], cb[1], lower - bed_z),
-                                   (cb[0], cb[1], h - bed_z), (ca[0], ca[1], h - bed_z)],
-                                  _shade(tools[t % len(tools)], SIDE_SHADE[d])))
-                i = j + 1
-    return items
-
 
 def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z: float, colors: list[str],
            cell_mm: int = 3, max_z: float = 0.0, carriage_xy: tuple[float, float] | None = None,
@@ -183,19 +107,26 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
     tools = [hex_rgb(c) for c in colors] or [(230, 230, 230)]
     # A black filament would vanish on the dark plate, so very dark colors are lifted a little. The legend shows the real colors.
     tools = [c if max(c) >= 45 else (45, 45, 48) for c in tools]
-    grid = {(b[0], b[1]): (float(b[2]), int(b[3]), float(b[4]) if len(b) > 4 else 0.0) for b in blocks}
-    top = max(1.0, max_z or max((v[0] for v in grid.values()), default=1.0))
+    grid = {(b[0], b[1]): b[2] for b in blocks}
+    top = max(1.0, max_z or max((b[2] for b in blocks), default=1.0))
+    order = []
+    for b in blocks:  # (cx, cy, height, tool) or with a fifth number: where the plastic starts (above 0 is an overhang)
+        cx, cy, h, t = b[:4]
+        base = float(b[4]) if len(b) > 4 else 0.0
+        o = view.to_corner((cx + 0.5) * cell_mm, (cy + 0.5) * cell_mm)
+        order.append((-math.hypot(o[0] - cam[0], o[1] - cam[1]), "b", (cx, cy, h, t, o, base)))
     parked = carriage_xy is not None and S.is_parked(*carriage_xy)
-    items = _print_items(view, grid, bed_z, cell_mm, tools, top)  # (far to near sort key, points, color)
     if carriage_xy is not None and not parked and S.DRAW_MOVING_CARRIAGE:
         centre, faces = S.carriage_parts(view, *carriage_xy)
-        key = -math.hypot(centre[0] - cam[0], centre[1] - cam[1])
-        items += [(key, pts, color) for pts, color in faces]
-    items.sort(key=lambda e: e[0])  # far first, so near ones cover them
+        order.append((-math.hypot(centre[0] - cam[0], centre[1] - cam[1]), "c", faces))
+    order.sort(key=lambda e: e[0])  # far first, so near ones cover them
     # A soft shadow on the plate around the print: the plate under every block, one cell wider, made darker once.
-    if grid:
+    if blocks:
         mask = bytearray(W * H)
-        for (cx, cy) in grid:
+        for _, kind, d in order:
+            if kind != "b":
+                continue
+            cx, cy = d[0], d[1]
             x0, y0 = (cx - 1) * cell_mm, (cy - 1) * cell_mm
             q = [view.px(*view.to_corner(x0 + ex * 3 * cell_mm, y0 + ey * 3 * cell_mm), -bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
             if all(q):
@@ -207,10 +138,31 @@ def render(setup: CameraSetup, blocks: list[tuple[int, int, float, int]], bed_z:
                 rgb[j] = rgb[j] * 3 // 5
                 rgb[j + 1] = rgb[j + 1] * 3 // 5
                 rgb[j + 2] = rgb[j + 2] * 3 // 5
-    for _, pts, color in items:
-        o = view.outline(pts)
-        if o:
-            _fill(rgb, o, color)
-            _stroke(rgb, o, color)  # the same color on the edges, so no thin gap shows between two faces
+    neighbours = ((0, -1, 0, 0, 1, 0), (1, 0, 1, 0, 1, 1), (0, 1, 0, 1, 1, 1), (-1, 0, 0, 0, 0, 1))  # dx, dy, edge corners
+    for _, kind, d in order:
+        if kind == "c":
+            for pts, color in d:
+                view.draw(rgb, pts, color)
+            continue
+        cx, cy, h, t, o, floor = d
+        base = tools[t % len(tools)]
+        x0, y0 = cx * cell_mm, cy * cell_mm
+        for i, (dx, dy, ax, ay, bx, by) in enumerate(neighbours):
+            lower = max(grid.get((cx + dx, cy + dy), 0.0), floor)  # an overhang has no side below where it starts
+            if lower >= h:
+                continue
+            a = view.to_corner(x0 + ax * cell_mm, y0 + ay * cell_mm)
+            b = view.to_corner(x0 + bx * cell_mm, y0 + by * cell_mm)
+            mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+            if (mx - o[0]) * (cam[0] - mx) + (my - o[1]) * (cam[1] - my) <= 0:
+                continue  # this side faces away from the camera
+            q = [view.px(a[0], a[1], lower - bed_z), view.px(b[0], b[1], lower - bed_z),
+                 view.px(b[0], b[1], h - bed_z), view.px(a[0], a[1], h - bed_z)]
+            if all(q):
+                _fill(rgb, q, _shade(base, SIDE_SHADE + 0.1 * i))  # type: ignore[arg-type]
+        q = [view.px(*view.to_corner(x0 + ex * cell_mm, y0 + ey * cell_mm), h - bed_z) for ex, ey in ((0, 0), (1, 0), (1, 1), (0, 1))]
+        if all(q):
+            grain = 0.94 + 0.06 * ((cx * 7 + cy * 13 + int(h * 5)) % 5) / 4  # a little layer to layer change
+            _fill(rgb, q, _shade(base, (TOP_SHADE + (1.0 - TOP_SHADE) * (h / top)) * grain))  # type: ignore[arg-type]
     S.draw_foreground(rgb, parked)
     return png(W, H, rgb)
