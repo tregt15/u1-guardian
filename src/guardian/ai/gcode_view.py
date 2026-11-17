@@ -30,6 +30,7 @@ N = int(BED_MM / CELL_MM)
 CHUNK = 1024 * 1024
 OVERHANG_GAP = 30      # 3.0 mm in 0.1 mm units: a cell skipped for more than this starts a new run (an overhang). 1 mm cut the walls into slices.
 LAYER_GUESS = 3        # 0.3 mm: how thick the first bit of a new run is drawn
+BRIDGE = 4             # cells: the widest gap between two bits of plastic that the clean picture fills in
 FIRST_LAYER_MAX = 6    # 0.6 mm: plastic this low always stands on the plate
 WORD_RE = re.compile(r"([A-Z])(-?\d*\.?\d+)")
 TOOL_RE = re.compile(r"^T(\d)\b")
@@ -82,8 +83,8 @@ class PlateMap:
     def blocks(self, cell: int = 3, with_base: bool = False, clean: bool = False) -> list[tuple]:
         """The plate in cell x cell mm blocks: (cx, cy, height in mm, tool of the tallest cell). Empty blocks are left out.
         With with_base each block also has where its plastic starts in mm (above 0 is an overhang).
-        With clean the map is tidied first (one cell holes filled, ragged heights smoothed, lone floating cells made solid),
-        so the picture shows solid walls and not slices (2026-11-17)."""
+        With clean the map is tidied first (gaps up to 4 cells filled, ragged heights smoothed, all columns solid),
+        so the picture shows solid walls with no holes (2026-11-17). Overhangs are not kept in the clean form."""
         height, tool, base = self.height, self.tool, self.base
         if clean:
             height, tool, base = self._tidy()
@@ -108,7 +109,7 @@ class PlateMap:
             return height, tool, base
         lo, hi = max(1, rows[0] - 1), min(N - 2, rows[-1] + 1)
         near = (-1, 1, -N, N, -N - 1, -N + 1, N - 1, N + 1)
-        src_h, src_b = list(height), list(base)
+        src_h = list(height)
         for cy in range(lo, hi + 1):  # fill a hole that has plastic on most sides
             for cx in range(1, N - 1):
                 k = cy * N + cx
@@ -119,6 +120,23 @@ class PlateMap:
                     height[k] = around[len(around) // 2]
                     tool[k] = tool[k + 1] or tool[k - 1]
         src_h = list(height)
+        for cy in range(max(BRIDGE, lo), min(N - 1 - BRIDGE, hi) + 1):  # bridge a gap up to BRIDGE cells wide that has plastic on both sides
+            for cx in range(BRIDGE, N - BRIDGE):
+                k = cy * N + cx
+                if src_h[k]:
+                    continue
+                fill = 0
+                for step in (1, N):
+                    lo_h = hi_h = 0
+                    for r in range(1, BRIDGE + 1):
+                        lo_h = lo_h or src_h[k - r * step]
+                        hi_h = hi_h or src_h[k + r * step]
+                    if lo_h and hi_h:
+                        fill = max(fill, min(lo_h, hi_h))
+                if fill:
+                    height[k] = fill
+                    tool[k] = tool[k - 1] or tool[k + 1] or tool[k - N]
+        src_h = list(height)
         for cy in range(lo, hi + 1):  # smooth ragged heights (median of the 3 x 3 cells)
             for cx in range(1, N - 1):
                 k = cy * N + cx
@@ -126,11 +144,7 @@ class PlateMap:
                     around = sorted(src_h[k + d] for d in (0,) + near if src_h[k + d])
                     if len(around) >= 5:
                         height[k] = around[len(around) // 2]
-        for cy in range(lo, hi + 1):  # an overhang needs neighbours that also overhang, a lone one is just a wall cell
-            for cx in range(1, N - 1):
-                k = cy * N + cx
-                if src_b[k] and sum(1 for d in near if src_b[k + d]) < 4:
-                    base[k] = 0
+        base = [0] * len(base)  # solid columns: floating bits showed as holes, so overhangs are not drawn in the clean picture
         return height, tool, base
 
     def covered_cells(self) -> int:
