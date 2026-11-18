@@ -120,6 +120,32 @@ def ollama_start_command() -> list[str] | None:
     return [exe, "serve"] if exe else None
 
 
+def ollama_is_local(url: str) -> bool:
+    """True when the Ollama address points at this computer. Guardian never stops a remote Ollama."""
+    from urllib.parse import urlparse
+    return (urlparse(url).hostname or "").lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def ollama_stop_commands() -> list[list[str]]:
+    """Commands that stop a local Ollama. Each is tried in turn. Linux: the systemd service needs
+    admin rights, so a plain process stop is the fallback (it works when Ollama runs as this user)."""
+    if platform.system() == "Windows":
+        # The tray app restarts the server if only the server is killed, so stop both.
+        return [["taskkill", "/F", "/IM", "ollama app.exe"], ["taskkill", "/F", "/IM", "ollama.exe"]]
+    return [["systemctl", "stop", "ollama"], ["pkill", "-x", "ollama"]]
+
+
+def stop_ollama() -> None:
+    """Fire and forget. Never raises."""
+    for cmd in ollama_stop_commands():
+        if shutil.which(cmd[0]) is None:
+            continue
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        except OSError:
+            pass
+
+
 def start_detached(cmd: list[str]) -> None:
     """Start a program that keeps running after Guardian stops."""
     if os.name == "nt":

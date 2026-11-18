@@ -692,11 +692,32 @@ class App:
         if any(k.startswith("notifications.email.") for k in changed):
             email = self.cfg.notifications.email
             self.notifier.channels = [self._email_channel()] if email.enabled else []
+        if "ai.enabled" in changed:
+            self._sync_ollama_service()
         if changed:
             log.info("settings changed from the dashboard: %s", changed)
             self.db.log("settings", "info", "settings changed from the dashboard",
                         {k: settings_mod.current(self.cfg)[k] for k in changed})
         return changed
+
+    def _sync_ollama_service(self) -> None:
+        """AI off stops a local Ollama so it frees memory. AI on starts it again.
+        Only for the local provider with a local address. Never touches a remote Ollama."""
+        from guardian import hostinfo
+        ai = self.cfg.ai
+        if ai.provider != "local" or not hostinfo.ollama_is_local(ai.ollama_url):
+            return
+        try:
+            if ai.enabled:
+                cmd = hostinfo.ollama_start_command()
+                if cmd:
+                    log.info("AI turned on: starting Ollama")
+                    hostinfo.start_detached(cmd)
+            else:
+                log.info("AI turned off: stopping Ollama")
+                hostinfo.stop_ollama()
+        except Exception:  # noqa: BLE001
+            log.exception("could not change the Ollama service")
 
     def _buffer_wanted(self) -> bool:
         """buffer_mode: `printing` buffers while a print is heating, running or paused (spec 6.1).
