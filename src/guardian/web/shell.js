@@ -139,6 +139,28 @@ async function printerControl(action) {
   } catch (e) { toast("Not sent: " + e.message, "t-crit"); return false; }
 }
 
+// Resume and Stop buttons for a paused print. After a resume is sent they turn into "Resuming".
+// The note stays for 60 s, so a redraw cannot bring the buttons back and nobody can click twice.
+let resumeSentAt = 0;
+const resumingNow = () => Date.now() - resumeSentAt < 60000;
+function resumeControls(cls, style) {
+  const box = el("div", { class: cls, style: style || "" });
+  const resuming = () => el("div", { class: "row gap-s", role: "status" }, ic("i-clock"), el("strong", {}, "Resuming the print..."));
+  if (Date.now() - resumeSentAt < 60000) { box.append(resuming()); return box; }
+  const go = el("button", { type: "button", class: "btn btn-primary" }, ic("i-play"), "Resume print");
+  go.addEventListener("click", async () => {
+    if (go.disabled) return;
+    go.disabled = true;
+    if (await printerControl("resume")) {
+      resumeSentAt = Date.now();
+      box.replaceChildren(resuming());
+      Shell.poll();
+    } else go.disabled = false;
+  });
+  box.append(go, el("button", { type: "button", class: "btn btn-danger-quiet", onclick: () => printerControl("cancel").then(() => Shell.poll()) }, ic("i-stop"), "Stop print"));
+  return box;
+}
+
 // Reprint, print a file, upload a file. Each asks the person to confirm and to say the plate is empty.
 function plateDialog(message, okText) {
   return new Promise((resolve) => {

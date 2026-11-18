@@ -258,16 +258,14 @@ function drawPaused(s) {
             safe === "yes" ? badge("t-ok", "i-check", "Yes") : safe === "no" ? badge("t-crit", "i-x", "No") : badge("t-muted", "i-info", "Unknown")),
           el("h3", { class: "sub-h" }, "What to check"),
           el("ol", { class: "numlist" }, ...(Array.isArray(ai.what_to_check) ? ai.what_to_check : []).map(x => el("li", {}, String(x))))) : null,
-        el("div", {}, el("h3", { class: "sub-h" }, "Before you resume"),
+        resumingNow() ? null : el("div", {}, el("h3", { class: "sub-h" }, "Before you resume"),
           el("div", { class: "todo", role: "group", "aria-label": "Checklist" }, ...items.map((t, i) => {
             const b = el("button", { type: "button", class: "chk", role: "checkbox", "aria-checked": checklist.get(i) ? "true" : "false" },
               el("span", { class: "box" }, ic("i-check")), el("span", { class: "c-t" }, t));
             b.addEventListener("click", () => { checklist.set(i, !checklist.get(i)); b.setAttribute("aria-checked", checklist.get(i) ? "true" : "false"); });
             return b;
           }))),
-        ctl ? el("div", { class: "ctrl", style: "margin-top:0" },
-          el("button", { type: "button", class: "btn btn-primary", onclick: () => printerControl("resume").then(() => Shell.poll()) }, ic("i-play"), "Resume print"),
-          el("button", { type: "button", class: "btn btn-danger-quiet", onclick: () => printerControl("cancel").then(() => Shell.poll()) }, ic("i-stop"), "Stop print"))
+        ctl ? resumeControls("ctrl", "margin-top:0")
           : el("p", { class: "small muted" }, "Resume or stop on the printer screen or in the app. Printer controls are off in Settings.")))));
 }
 
