@@ -303,7 +303,7 @@ textarea.input{padding:10px 12px;min-height:92px;line-height:1.5;resize:vertical
 .no-video p{max-width:420px;margin:0 auto;font-size:15px}
 .pctl{display:flex;align-items:center;gap:12px;padding:10px 16px 8px}
 .pbtn{width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#0E111A;display:grid;place-items:center;cursor:pointer;flex:none}
-.pbtn .ic{fill:#0E111A}
+.pbtn .ic{fill:#0E111A;stroke-width:3.5}
 .ptime{font:600 14px var(--mono);color:#E9EDF8;white-space:nowrap}
 .tbar{position:relative;flex:1;min-width:0;height:36px}
 .tbar .trk{position:absolute;left:0;right:0;top:15px;height:6px;border-radius:999px;background:#3A4157;overflow:hidden}
