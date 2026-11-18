@@ -305,8 +305,17 @@ async function load() {
   }
   try { newestUid = ((await api("/api/incidents?limit=1")).incidents[0] || {}).uid; } catch (e) { newestUid = null; }
   try { logsText = await api("/api/incidents/" + encodeURIComponent(uid) + "/logs"); } catch (e) { logsText = { available: false, note: "Could not load the printer log: " + e.message }; }
+  // The page is drawn again when logs or the AI diagnosis arrive. Keep the video where it was.
+  const keep = video && video.currentTime > 0 ? { t: video.currentTime, playing: !video.paused && !video.ended } : null;
   video = null;
   draw();
+  if (keep && video) {
+    const v = video;
+    v.addEventListener("loadedmetadata", () => {
+      v.currentTime = keep.t;
+      if (keep.playing) v.play().catch(() => {});
+    }, { once: true });
+  }
 }
 
 load();
@@ -317,5 +326,6 @@ let tries = 0;
 const later = setInterval(() => {
   tries += 1;
   if (tries > 12) { clearInterval(later); return; }
+  if (video && !video.paused && !video.ended) return; // never redraw while someone is watching
   if (data && data.incident.recording_status !== "recording" && (!logsText || !logsText.available || !(data.findings || {}).available)) load();
 }, 10000);
