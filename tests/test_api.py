@@ -353,3 +353,23 @@ def test_simulated_picture_endpoint(tmp_path):
     env.client = TestClient(create_app(env.ctx))
     r = env.client.get("/api/print/simulated.png")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+
+
+def test_toolchange_failures_by_tool_and_print(tmp_path):
+    env = make_env(tmp_path)
+    err = "!! Extruder extruder3 malfunction after parking, extruder3 failed to return to park position. state: ACTIVATE [FTT]"
+    rows = [("cow.gcode", "extruder3", "extruder1", "error", err), ("cow.gcode", "extruder1", "extruder2", "ok", None),
+            ("cow.gcode", "extruder3", "extruder2", "error", err), ("cow.gcode", "extruder1", "extruder2", "ok", None),
+            ("sheep.gcode", "extruder1", "extruder2", "ok", None), ("sheep.gcode", "extruder2", "extruder1", "park_only", None)]
+    for i, (f, prev, req, res, e) in enumerate(rows):
+        env.db.create_toolchange(print_filename=f, previous_tool=prev, requested_tool=req, result=res, error=e,
+                                 started_utc=f"2026-11-10T0{i}:00:00.000Z")
+    r = env.client.get("/api/toolchanges/failures").json()
+    assert r["total_failed"] == 2 and r["total_changes"] == 6
+    t3 = next(t for t in r["tools"] if t["tool"] == "extruder3")
+    assert t3["failed"] == 2 and t3["changes"] == 2
+    cow = next(p for p in r["prints"] if p["print_filename"] == "cow.gcode")
+    assert cow["failed"] == 2 and cow["one_in"] == 2 and cow["by_tool"] == {"extruder3": 2} and cow["minutes_between"] == 120
+    sheep = next(p for p in r["prints"] if p["print_filename"] == "sheep.gcode")
+    assert sheep["failed"] == 0 and sheep["one_in"] is None  # park_only is a warning, not a failure
+    assert len(r["points"]) == 2

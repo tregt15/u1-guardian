@@ -230,6 +230,71 @@ class Database:
                 "counts": {(c["result"] or "open"): int(c["n"]) for c in counts},
                 "median_ms": ok[len(ok) // 2] if ok else None, "slowest_recent": slowest, "points": pts}
 
+    # Results that mean the printer or a tool had a problem. park_only and interrupted are left out:
+    # the first is a warning, the second means Guardian lost track.
+    FAILED_RESULTS = ("error", "timeout", "wrong_tool", "bad_state")
+
+    def toolchange_failures(self, max_points: int = 500, max_prints: int = 30) -> dict[str, Any]:
+        """Failed changes by tool and by print, and how often they happen, over everything recorded."""
+        import re
+        from datetime import datetime
+
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, print_filename, requested_tool, previous_tool, started_utc, result, error"
+                " FROM toolchange_records ORDER BY started_utc, id").fetchall()
+
+        def fault(r) -> str | None:
+            """The tool the problem belongs to: the one named in the printer's message, else the one parked
+            (park_only) or the one asked for."""
+            m = re.search(r"Extruder (extruder\d*)", r["error"] or "")
+            return m.group(1) if m else (r["previous_tool"] if r["result"] == "park_only" else r["requested_tool"]) or None
+
+        def when(iso: str) -> datetime:
+            return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+
+        tools: dict[str, dict[str, int]] = {}
+        prints: dict[str, dict[str, Any]] = {}
+        points: list[dict[str, Any]] = []
+        for r in rows:
+            if r["result"] is None:
+                continue
+            for t in {r["previous_tool"], r["requested_tool"]} - {None}:
+                tools.setdefault(t, {"changes": 0, "failed": 0})["changes"] += 1
+            name = r["print_filename"] or "Unknown print"
+            p = prints.setdefault(name, {"print_filename": name, "changes": 0, "failed": 0, "by_tool": {},
+                                         "first_utc": r["started_utc"], "last_utc": r["started_utc"],
+                                         "first_failed_utc": None, "last_failed_utc": None})
+            p["changes"] += 1
+            p["last_utc"] = r["started_utc"]
+            if r["result"] in self.FAILED_RESULTS:
+                t = fault(r) or "unknown"
+                tools.setdefault(t, {"changes": 0, "failed": 0})["failed"] += 1
+                p["failed"] += 1
+                p["by_tool"][t] = p["by_tool"].get(t, 0) + 1
+                p["first_failed_utc"] = p["first_failed_utc"] or r["started_utc"]
+                p["last_failed_utc"] = r["started_utc"]
+                points.append({"started_utc": r["started_utc"], "tool": t, "result": r["result"],
+                               "print_filename": name})
+        out_prints = []
+        for p in prints.values():
+            f = p["failed"]
+            p["one_in"] = round(p["changes"] / f) if f else None
+            span_min = (when(p["last_utc"]) - when(p["first_utc"])).total_seconds() / 60
+            p["failed_per_hour"] = round(f / (span_min / 60), 1) if f and span_min >= 10 else None
+            if f >= 2:
+                gap = (when(p["last_failed_utc"]) - when(p["first_failed_utc"])).total_seconds() / 60 / (f - 1)
+                p["minutes_between"] = round(gap)
+            else:
+                p["minutes_between"] = None
+            out_prints.append(p)
+        out_prints.sort(key=lambda p: p["last_utc"], reverse=True)
+        return {"tools": [{"tool": t, **v, "percent": round(100 * v["failed"] / v["changes"], 1) if v["changes"] else 0}
+                          for t, v in sorted(tools.items())],
+                "prints": out_prints[:max_prints], "points": points[-max_points:],
+                "total_failed": sum(p["failed"] for p in out_prints),
+                "total_changes": sum(p["changes"] for p in out_prints)}
+
     def toolchange_stats(self) -> dict[str, Any]:
         with self._lock:
             rows = self._conn.execute(

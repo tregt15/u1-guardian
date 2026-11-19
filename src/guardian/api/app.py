@@ -731,6 +731,10 @@ def create_app(ctx: ApiContext) -> FastAPI:
     async def toolchange_summary() -> dict:
         return db.toolchange_summary()
 
+    @app.get("/api/toolchanges/failures", dependencies=[Depends(auth)])
+    async def toolchange_failures() -> dict:
+        return db.toolchange_failures()
+
     @app.post("/api/autopause/cancel", dependencies=[Depends(auth)])
     async def autopause_cancel() -> dict:
         fn = ctx.extra.get("cancel_autopause")
