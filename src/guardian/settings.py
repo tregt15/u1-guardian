@@ -70,7 +70,11 @@ FIELDS: list[dict[str, Any]] = [
     {"key": "ai.api_key_env", "group": "AI", "label": "API key environment variable (optional)", "kind": "text",
      "help": "You can type your key in the AI box below instead. If this environment variable is set, it is used first."},
     {"key": "ai.model", "group": "AI", "label": "Local model", "kind": "choice", "options": dict(AI_MODELS),
-     "help": "Bigger is better but slower. Needs a graphics card or a fast computer. Too big for a Raspberry Pi."},
+     "help": "Bigger is better but slower. Needs a graphics card or a fast computer. Too big for a Raspberry Pi. "
+             "If answers time out, pick a smaller model and download it in the AI box."},
+    {"key": "ai.timeout_s", "group": "AI", "label": "Wait for an AI answer (seconds)", "kind": "number",
+     "min": 10, "max": 1800,
+     "help": "How long Guardian waits for one answer. Raise it if you see 'did not answer within' errors. Slow computers need 300 or more."},
     {"key": "ai.ollama_url", "group": "AI", "label": "Ollama address", "kind": "text",
      "help": "Leave as is if Ollama runs on this computer. A Pi can use Ollama on another computer."},
     {"key": "ai.bed_check", "group": "AI", "label": "Check the build plate when a print starts", "kind": "bool",

@@ -215,6 +215,8 @@ PAUSABLE_EVENTS = (
 AI_MODELS = {  # Ollama model name -> what the settings page shows. Sizes are Ollama's download sizes.
     "qwen2.5vl:7b": "Qwen2.5-VL 7B (about 6 GB, better)",
     "gemma3:4b": "Gemma 3 4B (about 3.3 GB, faster)",
+    # UNVERIFIED on the real U1 setup: a smaller model for graphics cards with 6 GB or less.
+    "qwen2.5vl:3b": "Qwen2.5-VL 3B (about 3.2 GB, fastest, less exact)",
 }
 
 

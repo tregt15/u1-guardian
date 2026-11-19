@@ -26,6 +26,25 @@ class OllamaError(Exception):
     pass
 
 
+def explain_failure(exc: Exception, timeout: float, where: str = "Ollama") -> str:
+    """Plain words for a failed AI call, with what the person can do about it."""
+    kind = type(exc).__name__
+    if isinstance(exc, httpx.TimeoutException):
+        if where == "Ollama":
+            return (f"The AI did not answer within {timeout:.0f} seconds ({kind}). The model may still be loading, or the "
+                    "graphics card may be short on memory so the model runs slowly. Try again in a minute. "
+                    "If it keeps happening, pick a smaller model or a longer wait in Settings, in the AI group.")
+        return (f"The AI service did not answer within {timeout:.0f} seconds ({kind}). Try again in a minute. If it keeps "
+                "happening, pick a longer wait in Settings, in the AI group.")
+    if isinstance(exc, httpx.ConnectError):
+        if where == "Ollama":
+            return (f"Guardian could not connect to Ollama ({kind}). Ollama may not be running. Turn AI off and on again "
+                    "in Settings to start it, or check the Ollama address.")
+        return (f"Guardian could not connect to the AI service ({kind}). Check the internet connection and the "
+                "address in Settings.")
+    return f"could not reach {'Ollama' if where == 'Ollama' else 'the AI service'} ({kind})"
+
+
 @dataclass
 class PullState:
     model: str | None = None
@@ -134,7 +153,10 @@ class Ollama:
             async with self._client(timeout) as c:
                 r = await c.post("/api/chat", json=body)
         except httpx.HTTPError as exc:
-            raise OllamaError(f"could not reach Ollama ({type(exc).__name__})") from exc
+            raise OllamaError(explain_failure(exc, timeout)) from exc
+        if r.status_code == 404:
+            raise OllamaError(f"Ollama does not have the model '{model}'. Download it in the AI box in Settings. "
+                              f"(HTTP 404: {r.text[:120]})")
         if r.status_code != 200:
             raise OllamaError(f"Ollama answered HTTP {r.status_code}: {r.text[:200]}")
         try:

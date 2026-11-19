@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from guardian.ai.ollama import OllamaError
+from guardian.ai.ollama import OllamaError, explain_failure
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -114,7 +114,10 @@ class RemoteAI:
             async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as c:
                 r = await c.post(self._base() + path, headers=self._headers(), json=body)
         except httpx.HTTPError as exc:
-            raise RemoteAiError(f"could not reach the AI service ({type(exc).__name__})") from exc
+            raise RemoteAiError(explain_failure(exc, timeout, "the AI service")) from exc
+        if r.status_code in (401, 403):
+            raise RemoteAiError("The AI service refused the API key. Check the key in the AI box in Settings. "
+                                f"(HTTP {r.status_code})")
         if r.status_code != 200:
             raise RemoteAiError(f"the AI service answered HTTP {r.status_code}: {r.text[:200]}")
         try:
