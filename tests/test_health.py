@@ -164,3 +164,25 @@ async def test_selftest_against_a_fake_printer(tmp_path):
     assert selftest.remember_firmware(tmp_path, "1.4.1") is None
     assert selftest.remember_firmware(tmp_path, "1.4.1") is None
     assert selftest.remember_firmware(tmp_path, "1.5.0") == "1.4.1"
+
+
+async def test_selftest_camera_off_is_not_a_problem_but_a_wrong_address_is():
+    roots = [{"name": "camera"}]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/server/info":
+            return httpx.Response(200, json={"result": {"moonraker_version": "1", "klippy_state": "ready"}})
+        if path == "/server/files/roots":
+            return httpx.Response(200, json={"result": roots})
+        return httpx.Response(404)  # no monitor.jpg: the camera is off
+
+    cfg = Config(printer=PrinterConfig(host="u1", moonraker_port=80),
+                 camera=CameraConfig(snapshot_url="http://u1/server/files/camera/monitor.jpg"))
+    r = await selftest.run_checks(cfg, httpx.MockTransport(handler))
+    cam = next(c for c in r["checks"] if c["name"] == "Camera picture")
+    assert cam["ok"] and "camera is on" in cam["detail"]
+    roots.clear()  # no camera folder at all: the address is wrong
+    r = await selftest.run_checks(cfg, httpx.MockTransport(handler))
+    cam = next(c for c in r["checks"] if c["name"] == "Camera picture")
+    assert not cam["ok"] and "404" in cam["detail"]

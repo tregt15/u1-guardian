@@ -86,7 +86,14 @@ async def run_checks(cfg: Config, transport: httpx.AsyncBaseTransport | None = N
             async with httpx.AsyncClient(timeout=8.0, transport=transport) as c:
                 r = await c.get(cfg.camera.snapshot_url)
             ok = r.status_code == 200 and r.content.startswith(b"\xff\xd8")
-            checks.append(Check("Camera picture", ok, f"{len(r.content) // 1024} KB JPEG" if ok else f"HTTP {r.status_code}"))
+            detail = f"{len(r.content) // 1024} KB JPEG" if ok else f"HTTP {r.status_code}"
+            if r.status_code == 404 and await _camera_folder_exists(c_base=base, transport=transport):
+                # The printer only makes monitor.jpg while the camera is on (docs/u1-discovery-notes.md), so a 404
+                # while nobody is watching is normal, for example when Guardian starts. Not a fault.
+                ok = True
+                detail = ("no picture right now. The printer only makes one while its camera is on. "
+                          "Guardian turns it on during prints.")
+            checks.append(Check("Camera picture", ok, detail))
         except Exception as exc:  # noqa: BLE001
             checks.append(Check("Camera picture", False, str(exc)))
     if cfg.ai.enabled and cfg.ai.provider != "local":
@@ -103,6 +110,17 @@ async def run_checks(cfg: Config, transport: httpx.AsyncBaseTransport | None = N
         checks.append(Check("Local AI", has, f"Ollama {version}, model {cfg.ai.model} "
                             + ("ready" if has else "not downloaded") if version else f"Ollama not found at {cfg.ai.ollama_url}"))
     return _result(checks, firmware)
+
+
+async def _camera_folder_exists(c_base: str, transport: httpx.AsyncBaseTransport | None) -> bool:
+    """True if Moonraker has a 'camera' file root. Tells "camera is off" (fine) from "wrong address"."""
+    try:
+        async with httpx.AsyncClient(base_url=c_base, timeout=8.0, transport=transport) as c:
+            r = await c.get("/server/files/roots")
+            r.raise_for_status()
+            return any(x.get("name") == "camera" for x in r.json().get("result", []))
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return False
 
 
 def _result(checks: list[Check], firmware: str | None) -> dict[str, Any]:
