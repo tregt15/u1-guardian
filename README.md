@@ -1,47 +1,39 @@
 # U1 Guardian
 
-A diagnostic tool for the Snapmaker U1 3D printer. It is open source (MIT).
+An error clipping tool for the Snapmaker U1 3D printer. Open source (MIT). It runs on stock firmware and installs nothing on the printer.
 
-Guardian keeps a rolling camera buffer. When something goes wrong, it saves the video from before and after the event. The goal is to show what happened right before a print failed.
+![A real T3 park error: the saved clip, the problem marked on the timeline, and what the printer reported](docs/site/img/incident-dark.jpg)
 
-Guardian only watches. It never sends a command that changes the printer.
+## Why I made it
 
-## Status
+The U1's own error handling didn't tell me enough. When a print failed, I got an error code and a paused printer. I couldn't tell how it happened or why, and by the time I looked, the moment was gone.
 
-Early work. It has run on one real U1 on Windows. It has not run on a Raspberry Pi yet.
+So Guardian keeps a rolling buffer of the U1's camera. When something goes wrong, it saves the 30 seconds before the problem and the 15 seconds after, next to a timeline of what the printer reported and the printer's own logs from those minutes.
 
-What exists so far (Milestone 0, no printer needed):
+Then it started finding things I would have missed. On my own U1 it timed 2,599 tool changes over 10 days. Twelve failed, and 8 of the 11 printer errors named the same toolhead, T3. The printer only ever shows one error at a time, so I never saw that pattern until Guardian lined them up.
 
-- Config, event bus, clock, SQLite storage
-- Camera capture with a rolling 2 second segment buffer (stand-in test video for now)
-- Incident manager: saves 30 s before and 15 s after a trigger, merges repeats, and reports honest recording status
-- `tools/simulate_trigger.py` to fire fake triggers and check the clips
-- Read-only Moonraker WebSocket client, event detectors, and `tools/ws_recorder.py`
-- `python -m guardian.main` runs it all (see config.example.yaml)
-- Web interface in the "Halo" design (docs/design): Dashboard, Incidents, Incident detail (video with the problem
-  marked, timeline, AI diagnosis, printer logs), Tool changes (chart and log), Settings. Light and dark, phone and
-  desktop, nothing loaded from the internet. The theme button in the header switches between Auto, Light and Dark
-- Tool change log: every tool change with its time and result. Alerts when a change gets stuck, ends on the wrong tool,
-  or ends with odd tool states. Checked against 407 real tool changes (no false alarms). No real failed change has been seen yet
-- Alert when the filament feeder reports an error (seen once on a real U1)
-- Keeps the printer's own logs (Klipper, Moonraker, camera service) for the time of each incident
-- Health checks: a print that stops moving (stall), a heater that cannot reach or hold its temperature,
-  tool changes that slowly get slower
-- "Print is paused" panel on the dashboard with the reason, a live picture and what to check
-- Self-test (`python -m guardian.selftest`) that checks the printer still offers everything Guardian reads.
-  It also warns when the printer firmware changes
-- Optional local AI (see below)
-- Camera on the U1: snapshot polling, about 1 to 2 pictures a second. Guardian turns the camera on by itself, always by default
-  (`camera.keepalive`, see below). With that off, footage exists only while the Snapmaker app has the camera view open
-- Names the printer's own camera AI alerts (dirty build plate, spaghetti, residue, dirty nozzle). The printer pauses the print
-  itself. Guardian records it. Read from the printer's code, not yet seen on a real print (about 1 frame per second)
+## What it does
 
-What was seen on a real U1 is in `docs/u1-discovery-notes.md`. Anything not listed there, like Snapmaker's own
-spaghetti and bed alerts, is **unverified**. Guardian does not pretend to detect those.
+- **Saves the footage from before a failure**, using the camera already in the U1. Each incident gets the clip, a timeline in clip time, and the printer's logs.
+- **Times every tool change.** It learns what normal is on your printer and flags changes that get stuck, end on the wrong tool or report an error. A card shows which tool fails, in which print, and how often.
+- **Shows what the camera should see.** It draws the printer from your G-code and puts it next to the live picture.
+- **Optional AI** (local with Ollama, or your own API key) checks the plate, looks for spaghetti and writes a short diagnosis. Its answers are always marked as a guess.
+- **Runs as a web page** on your own computer or a Raspberry Pi. No app, no account, nothing loaded from the internet.
+
+![Tool changes: how long each took, and which ones failed](docs/site/img/toolchanges-dark.jpg)
+
+## Honest limits
+
+- Tested on one U1 (firmware 2.1.0.157) on Windows. Raspberry Pi and Linux are not run on real hardware yet.
+- Auto pause has not paused a real print yet. Starting a print from the dashboard is unverified on the real U1.
+- If any footage is missing, a clip says partial, never complete.
+- Guardian shows evidence and patterns. It does not diagnose the printer for you.
+- Anything about the U1 that was not seen on a real printer is marked `UNVERIFIED` in the code and docs. What was seen is in `docs/u1-discovery-notes.md`.
+- I built it with AI coding assistance (Claude Code) and run it on my own printer.
 
 ## What Guardian sends to the printer
 
-Guardian only reads from the printer, with two exceptions you can turn off on the Settings page.
+Guardian mostly reads. A few features send commands, each behind its own switch on the Settings page: the camera start below, auto pause, the dashboard buttons (pause, resume, stop), the camera setup moves and starting a print. Turn them all off and it only reads.
 
 ### Auto camera
 
