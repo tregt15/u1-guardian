@@ -1,5 +1,5 @@
 """Stall, heater, tool change trend and self-test checks. Made-up data. The real prints are replayed
-by hand (see docs/decisions.md) and gave no false alarms."""
+by hand and gave no false alarms."""
 
 import httpx
 

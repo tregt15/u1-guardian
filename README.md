@@ -2,7 +2,7 @@
 
 An error clipping tool for the Snapmaker U1 3D printer. Open source (MIT). It runs on stock firmware and installs nothing on the printer.
 
-![A real T3 park error: the saved clip, the problem marked on the timeline, and what the printer reported](docs/site/img/incident-dark.jpg)
+![A real T3 park error: the saved clip, the problem marked on the timeline, and what the printer reported](docs/img/incident-dark.jpg)
 
 ## Why I made it
 
@@ -20,7 +20,7 @@ Then it started finding things I would have missed. On my own U1 it timed 2,599 
 - **Optional AI** (local with Ollama, or your own API key) checks the plate, looks for spaghetti and writes a short diagnosis. Its answers are always marked as a guess.
 - **Runs as a web page** on your own computer or a Raspberry Pi. No app, no account, nothing loaded from the internet.
 
-![Tool changes: how long each took, and which ones failed](docs/site/img/toolchanges-dark.jpg)
+![Tool changes: how long each took, and which ones failed](docs/img/toolchanges-dark.jpg)
 
 ## Honest limits
 

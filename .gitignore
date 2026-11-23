@@ -26,3 +26,16 @@ marketing/posters/
 
 # owner's private notes (tracker address)
 CLAUDE.local.md
+
+# owner's private files, not part of the self-hosted app
+CLAUDE.md
+PLAN.md
+u1-guardian-design-spec.md
+docs/forum-post.md
+docs/decisions.md
+docs/ui-design-brief.md
+docs/design/
+docs/brand/
+docs/site/
+tools/marketing/
+tests/test_marketing.py
