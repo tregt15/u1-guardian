@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "u1-guardian"
-version = "0.0.1"
-description = "Diagnostic tool and failure black box for the Snapmaker U1 3D printer."
+version = "0.1.0"
+description = "Error clipping for the Snapmaker U1: saves the camera footage from before and after a print fails, with a timeline and the printer's logs."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

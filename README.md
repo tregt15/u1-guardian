@@ -171,7 +171,8 @@ See `docs/pi-setup.md`. The install script and service file are untested on a re
 ## Requirements
 
 - Python 3.11 or newer
-- FFmpeg and ffprobe on your PATH (not bundled)
+- FFmpeg and ffprobe on your PATH (not bundled). On Windows: `winget install Gyan.FFmpeg`, then open a new terminal.
+  If Guardian says it can't find FFmpeg, set `camera.ffmpeg_path` and `camera.ffprobe_path` in `config.yaml`.
 
 ## Dev setup (Windows cmd)
 
