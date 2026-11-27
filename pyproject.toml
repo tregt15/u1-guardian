@@ -33,6 +33,7 @@ guardian = ["storage/schema.sql", "web/*", "camera/default_calibration.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
